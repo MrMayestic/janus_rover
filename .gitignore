@@ -1,0 +1,6 @@
+node_modules
+rover_web_board.ino.esp32.bin
+.vscode
+.theia
+.env
+wifi_config.h
