@@ -5,6 +5,8 @@ const mysql = require("mysql");
 
 require('dotenv').config();
 
+console.log(process.env.HOST);
+
 var con = mysql.createConnection({
   host: process.env.HOST,
   user: process.env.USER,
@@ -32,7 +34,7 @@ app.post("/sendData", (req, res) => {
 
   let parseData = JSON.parse(req.body);
 
-  var sql = "INSERT INTO jr_data (temperature, humidity, since_start) VALUES ?";
+  // var sql = "INSERT INTO jr_data (temperature, humidity, since_start) VALUES ?";
   var values = [
     [parseData["temperature"], parseData["humidity"], parseData["since_start"]],
   ];
@@ -41,10 +43,10 @@ app.post("/sendData", (req, res) => {
     console.log(i);
   }
 
-  con.query(sql, [values], function (err, result) {
-    if (err) throw err;
-    console.log("Number of records inserted: " + result.affectedRows);
-  });
+  // con.query(sql, [values], function (err, result) {
+  //   if (err) throw err;
+  //   console.log("Number of records inserted: " + result.affectedRows);
+  // });
 });
 
 app.listen(8080, () => {

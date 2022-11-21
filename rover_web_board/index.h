@@ -1,4 +1,5 @@
-#include "Arduino.h" const char MAIN_page[] PROGMEM = R"=====(
+#include "Arduino.h" 
+const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html>
 
@@ -121,6 +122,7 @@
             <button type="button" id="servominus" class="sterButton"> SERVOMINUS </button>
           </div>
           <button type="button" id="joystickState">JOYSTICK OFF</button>
+          <button type="button" id="sendData">Send Data</button>
         </div>
       </div>
     </article>
@@ -186,9 +188,9 @@
           sendDataToggle = false;
           console.log(what);
           document.getElementById("info").innerHTML = what;
-          // var xhttp = new XMLHttpRequest();
-          // xhttp.open("GET", what, true);
-          // xhttp.send();
+          var xhttp = new XMLHttpRequest();
+          xhttp.open("GET", what, true);
+          xhttp.send();
           setTimeout(function () { }, 150);
           sendDataToggle = true;
         }
@@ -385,6 +387,11 @@
                 sendData(0);
               }
             });
+          document
+            .getElementById("sendData")
+            .addEventListener("mouseup", function () {
+              sendData("sendData");
+          });
         } else {
           document
             .getElementById("stop")
@@ -529,6 +536,11 @@
                 sendData(0);
               }
             });
+          document
+            .getElementById("sendData")
+            .addEventListener("touchstart", function () {
+              sendData("sendData");
+          });
         }
       }
       streamOn();

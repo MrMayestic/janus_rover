@@ -80,6 +80,7 @@ String sendData;
 bool joystickState = false;
 
 String joystickPath = "http://" + String(joystick_server_ip) + "/getJoyState";
+String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
 
 int httpResponseCode;
 
@@ -263,7 +264,72 @@ void hspiCommand(String stringMess) // SPI TRANSFER FUNCTION
   hspi->endTransaction();
 }
 
-/*Function that handles http requests and responses*/
+//---------------------HTTP request functions (to send joystick requests to web_board of joystick)---------------------------------------------------------------
+
+/*
+1 - joystick
+10 - send POST
+*/
+
+void http_request(int whichReq)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    HTTPClient http;
+    Serial.println(whichReq);
+    // Your Domain name with URL path or IP address with path
+    if (whichReq == 1)
+    {
+      Serial.println("aha");
+      http.begin(joystickPath.c_str());
+
+      // Send HTTP GET request
+      httpResponseCode = http.GET();
+
+      if (httpResponseCode > 0)
+      {
+        Serial.print("HTTP joystick Response code: ");
+        Serial.println(httpResponseCode);
+
+        payload = http.getString();
+
+        Serial.println(payload);
+
+        sendData = payload + "\n";
+        hspiCommand(sendData);
+      }
+    }
+    else if (whichReq == 10)
+    {
+      http.begin(sendDataPath.c_str());
+
+      http.addHeader("Content-Type", "text/plain");
+      // http.addHeader(("Access-Control-Allow-Origin", "*");
+      int humidity = 34;
+      String sendIt = "{\"temperature\":\"18.6\",\"humidity\":\""+String(humidity)+"\",\"since_start\":\"0:32:16\"}";
+      int httpResponseCode = http.POST(sendIt);
+
+      if (httpResponseCode > 0)
+      {
+        Serial.print("HTTP data Response code: ");
+        Serial.println(httpResponseCode);
+      }
+    }
+    else
+    {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+    // Free resources
+    http.end();
+  }
+  else
+  {
+    Serial.println("WiFi Disconnected");
+  }
+}
+
+/*Function that handles http responses*/
 
 void http_resp()
 {
@@ -283,7 +349,7 @@ void http_resp()
       // Serial.println("elo");
       req += (char)client.read();
     }
-    // Serial.println("request " + req);
+    Serial.println("request " + req);
 
     /* First line of HTTP request is "GET / HTTP/1.1"
       here "GET /" is a request to get the first page at root "/"
@@ -427,6 +493,10 @@ void http_resp()
       delay(500);
       esp_deep_sleep_start();
     }
+    else if (req == "/sendData")
+    {
+      http_request(10);
+    }
     else
     {
       if (req != "/favicon.ico")
@@ -434,46 +504,6 @@ void http_resp()
     }
   }
   digitalWrite(33, LOW);
-}
-
-//---------------------HTTP request functions (to send joystick requests to web_board of joystick)---------------------------------------------------------------
-
-void http_request()
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    HTTPClient http;
-
-    // Your Domain name with URL path or IP address with path
-    http.begin(joystickPath.c_str());
-
-    // Send HTTP GET request
-    httpResponseCode = http.GET();
-
-    if (httpResponseCode > 0)
-    {
-      Serial.print("HTTP Response code: ");
-      Serial.println(httpResponseCode);
-
-      payload = http.getString();
-
-      Serial.println(payload);
-
-      sendData = payload + "\n";
-      hspiCommand(sendData);
-    }
-    else
-    {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-    }
-    // Free resources
-    http.end();
-  }
-  else
-  {
-    Serial.println("WiFi Disconnected");
-  }
 }
 
 //---------------------LOOP FUNCTION----------------------------------------------------------------------------
@@ -485,7 +515,7 @@ void loop()
   if (((millis() - lastTime) > timerDelay) && joystickState)
   {
     // Check WiFi connection status
-    http_request();
+    http_request(1);
     lastTime = millis();
   }
   // Serial.println(ESP.getFreeHeap());
