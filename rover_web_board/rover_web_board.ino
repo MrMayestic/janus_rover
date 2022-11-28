@@ -1,27 +1,25 @@
-#include "esp_camera.h" //Including files, libraries, other files
+/*Libraires and files including*/
 #include <SPI.h>
 #include <Arduino.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
+#include <string.h>
+
+#include "esp_camera.h"
 #include "esp_wifi.h"
-// #include <WiFi.h>
+
 #include "soc/soc.h" // disable brownout problems
 #include "soc/rtc_cntl_reg.h"
 
 #include "index.h"
 
 #include "wifi_config.h"
-// #include "style.css"
+
 #include "SPIFFS.h"
+
 #include "time.h"
-#include <string.h>
 
-#define RXp2 3
-#define TXp2 1
-
-const char *ntpServer = "vega.cbk.poznan.pl"; // Set time server
-const long gmtOffset_sec = 0;
-const int daylightOffset_sec = 7200;
+/*Defining pins/numbers etc.*/
 
 #define PWDN_GPIO_NUM 32 // Pins definition to handle ESP32 camera
 #define RESET_GPIO_NUM -1
@@ -46,51 +44,61 @@ const int daylightOffset_sec = 7200;
 #define HSPI_SCLK 14
 #define HSPI_SS 15
 
-// #define PRZOD 12
-// #define LEWO 13
-// #define TYL 15
-// #define PRAWO 14
-// #define WAKEUP 2
+/*Start defining variables*/
+
+const char *ntpServer = "vega.cbk.poznan.pl"; // Set time server
+const long gmtOffset_sec = 0;
+const int daylightOffset_sec = 7200;
+
+int currTemperature = 0;
+int currHumidity = 0;
+
+const int serverPort = server_port; // Server port
+
+static const int spiClk = 2000000; // Clock for SPI
+
+unsigned long lastTime = 0;
+unsigned long timerDelay = 50;
+
+unsigned long prevMillisSPI = 0;
+unsigned int SPIinterval = 50;
 
 bool canVideo = false;
 bool canLoad = false;
 bool canUpload = true;
 
-// int serialSendData;
-
-static const int spiClk = 2000000; // 2 MHz
-
-String serverIP = server_ip;     // IP SERWERA (LOKALNY SERWER CZYLI KOMPUTER Z PROGRAMEM XAMPP)
-String serverPath = server_path; // ŚCIEŻKA DO OBSLUGI LAZIKA
-
-const int serverPort = server_port; // PORT SERWERA
-WiFiServer server(serverPort);      // USTAWIENIE SERWERA
-
 bool connected = true;
 
-WiFiClient live_client; // USTAWIENIE KLASY CLIENT
-WiFiClient client;
-
-SPIClass *hspi = NULL;
-
-String s;
-
-String sendData;
+bool recivedDone = false;
 
 bool joystickState = false;
+
+String serverIP = server_ip;     // Server IP that handles data,photos etc.
+String serverPath = server_path; // Path on server
+
+String recData;
+
+String s;
+String req;
+
+String since_start;
 
 String joystickPath = "http://" + String(joystick_server_ip) + "/getJoyState";
 String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
 
-int httpResponseCode;
-
-String payload;
-
 String index_html = MAIN_page; // Load client site (HTML,CSS,JS)
 
-unsigned long lastTime = 0;
+char sendBuff[32];
 
-unsigned long timerDelay = 50;
+WiFiClient live_client; // USTAWIENIE KLASY CLIENT
+WiFiClient client;
+WiFiServer server(serverPort); // USTAWIENIE SERWERA
+
+/*SPI SECTION*/
+
+SPIClass *hspi = NULL;
+
+uint8_t c;
 
 // Configure camera in ESP32
 
@@ -123,6 +131,7 @@ void configCamera()
   config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
+
   if (err != ESP_OK)
   {
     // Serial.printf("Camera init failed with error 0x%x", err);
@@ -130,8 +139,10 @@ void configCamera()
   }
 }
 
+/*Handler for live transmission from camera*/
+
 void liveCam(WiFiClient &client)
-{ // SKRYPT DO PRZECHWYCENIA ZDJECIA Z KAMERY I WCZYTANIA DO STRONY
+{
 
   // capture a frame
   camera_fb_t *fb = esp_camera_fb_get();
@@ -152,127 +163,79 @@ void liveCam(WiFiClient &client)
   esp_camera_fb_return(fb);
 }
 
-// Setup function
+/*Function that handles SPI Sending to Slave (rover main board)*/
 
-void setup()
+void send_data(String stringMess)
 {
+  memset(sendBuff, 0, sizeof(sendBuff)); // Clearing send buffor to avoid messy chars
 
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+  hspi->endTransaction();
+  digitalWrite(HSPI_SS, HIGH);
+  delay(2);
 
-  Serial.begin(115200);
+  stringMess.toCharArray(sendBuff, stringMess.length() + 1);
 
-  pinMode(33, OUTPUT); // USTAWIENIE BLINKa
-
-  hspi = new SPIClass(HSPI);
-
-  if (!SPIFFS.begin(true))
-  {
-    // Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  // File root = SPIFFS.open("/");
-
-  // File file = root.openNextFile();
-
-  // while (file)
-  // {
-
-  //   // Serial.print("FILE: ");
-  //   // Serial.println(file.name());
-
-  //   file = root.openNextFile();
-  // }
-
-  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
-  // Serial.println("");
-  int wifiTries = 0;
-  // WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-
-  while (WiFi.status() != WL_CONNECTED)
-  { // SPRAWDZENIE CZY PODLACZONOSIE DO SIECI
-    if (wifiTries == 20)
-    {
-      break;
-    }
-
-    delay(500);
-    // Serial.print(".");
-    wifiTries++;
-  }
-
-  if (wifiTries >= 20)
-  {
-    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve); // JEZELI SIE NIE UDALO DO POPRZEDNIEJ SIECI DO PROBA PODLACZENIA DO LOKALNEGO HOTSPOTA
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-      // Serial.print(".");
-    }
-
-    wifiTries = NULL;
-  }
-
-  // Serial.println("");
-  String IP = WiFi.localIP().toString();
-
-  index_html.replace("server_ip", IP);
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
-  //   printLocalTime();
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
-
-  server.begin();
-
-  configCamera();
-
-  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
-
-  pinMode(HSPI_SS, OUTPUT);
-  // Serial2.begin(19200, SERIAL_8N1, RXp2, TXp2);
-}
-
-//--------------------------------------------------------------------
-
-void hspiCommand(String stringMess) // SPI TRANSFER FUNCTION
-{
-  Serial.println(stringMess);
-  Serial.println(" przesylam");
-
-  char buff[stringMess.length() + 1];
-  // Serial.println(message);
-  // uint8_t *data = (uint8_t *)message;
-  stringMess.toCharArray(buff, stringMess.length() + 1);
-  // Serial.println(message);
-  // byte stuff = send.toInt();
   hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
 
   digitalWrite(HSPI_SS, LOW);
 
-  for (int i = 0; i < sizeof buff; i++)
-  { /* transfer buff data per second */
-    // Serial.print(buff[i]);
-    // delayMicroseconds(10);
-    hspi->transfer(buff[i]);
+  delay(1);
+
+  for (int i = 0; i <= stringMess.length() + 1; i++)
+  {
+    // Prints for developing purposes
+    Serial.print(sendBuff[i]);
+    Serial.print(" ");
+    Serial.print((uint8_t)sendBuff[i]);
+    Serial.print(" ");
+    hspi->transfer((uint8_t)sendBuff[i]);
   }
-  // Serial.println(" ");
+  hspi->transfer((uint8_t)4);
 
   digitalWrite(HSPI_SS, HIGH);
 
   hspi->endTransaction();
+  // Serial.println("sended it");
 }
 
-//---------------------HTTP request functions (to send joystick requests to web_board of joystick)---------------------------------------------------------------
+/*Function that reads data from Slave (called from loop();)*/
 
-/*
+void read_data()
+{
+  // Serial.println("read_data");
+
+  for (int i = 0; i <= 24; i++)
+  {
+    delayMicroseconds(1);
+    c = hspi->transfer(NULL);
+    if ((int)c < 128 && (int)c > 31)
+    {
+      recData += (char)c;
+    }
+    // If c == 4 then it means end of message
+    if (c == 4)
+    {
+      Serial.print("Dane otrzymane: ");
+      Serial.println(recData);
+      recivedDone = true;
+      digitalWrite(HSPI_SS, HIGH);
+      hspi->endTransaction();
+      // return true;
+    }
+    // return false;
+  }
+}
+
+/* HTTP request functions (for sending requests via HTTP) */
+
+/* Codes
 1 - joystick
-10 - send POST
+10 - send POST req with measured data
 */
 
 void http_request(int whichReq)
 {
+  int httpResponseCode;
   if (WiFi.status() == WL_CONNECTED)
   {
     HTTPClient http;
@@ -291,37 +254,66 @@ void http_request(int whichReq)
         Serial.print("HTTP joystick Response code: ");
         Serial.println(httpResponseCode);
 
-        payload = http.getString();
+        String payload = http.getString();
 
         Serial.println(payload);
 
-        sendData = payload + "\n";
-        hspiCommand(sendData);
+        send_data(payload);
       }
     }
     else if (whichReq == 10)
     {
-      http.begin(sendDataPath.c_str());
+      send_data("sendData");
 
-      http.addHeader("Content-Type", "text/plain");
-      // http.addHeader(("Access-Control-Allow-Origin", "*");
-      int humidity = 34;
-      String sendIt = "{\"temperature\":\"18.6\",\"humidity\":\""+String(humidity)+"\",\"since_start\":\"0:32:16\"}";
-      int httpResponseCode = http.POST(sendIt);
+      delay(5);
 
-      if (httpResponseCode > 0)
-      {
-        Serial.print("HTTP data Response code: ");
-        Serial.println(httpResponseCode);
-      }
+      Serial.println("while in a while");
+
+      bool readDataResult = false;
+
+      read_data();
+      // while (recData.indexOf("h") )
+      // {
+      //   readDataResult = ;
+      //   delay(25);
+      // }
+
+      String copyOfRecData = recData; // In case of recData = "" while operating on that string
+      Serial.println(recData);
+      int t_start = copyOfRecData.indexOf("t");
+      int h_start = copyOfRecData.indexOf("h");
+      int ss_start = copyOfRecData.lastIndexOf("s");
+      String temperature = copyOfRecData.substring(t_start+1,h_start);
+      String humidity = copyOfRecData.substring(h_start+1,ss_start-1);
+      String since_start = copyOfRecData.substring(ss_start+1,copyOfRecData.length());
+      recData = "";
+      Serial.print(temperature);
+      Serial.print(" ");
+      Serial.print(humidity);
+      Serial.print(" ");
+      Serial.print(since_start);
+      Serial.println(" ");
+
+      // http.begin(sendDataPath.c_str());
+
+      // http.addHeader("Content-Type", "text/plain");
+
+      // String sendIt = "{\"temperature\":\"18.6\",\"humidity\":\"34\",\"since_start\":\"0:32:16\"}";
+      // httpResponseCode = http.POST(sendIt);
+
+      // if (httpResponseCode > 0)
+      // {
+      //   Serial.print("HTTP data Response code: ");
+      //   Serial.println(httpResponseCode);
+      // }
+      // else
+      // {
+      //   Serial.print("Error code: ");
+      //   Serial.println(httpResponseCode);
+      // }
+      // // Free resources
+      // http.end();
     }
-    else
-    {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-    }
-    // Free resources
-    http.end();
   }
   else
   {
@@ -333,9 +325,6 @@ void http_request(int whichReq)
 
 void http_resp()
 {
-  // delay(5);
-
-  // Serial.println(server.available());
   /* check client is connected */
   if (client.connected())
   {
@@ -346,7 +335,6 @@ void http_resp()
 
     while (client.available())
     {
-      // Serial.println("elo");
       req += (char)client.read();
     }
     Serial.println("request " + req);
@@ -356,9 +344,8 @@ void http_resp()
       "HTTP/1.1" is HTTP version 1.1
     */
     /* now we parse the request to see which page the client want */
-    // client.flush();
-    // Serial.println(req);
     int addr_start;
+
     if (req.indexOf("GET") != -1)
     {
       addr_start = req.indexOf("GET") + strlen("GET");
@@ -407,22 +394,28 @@ void http_resp()
         joystickState = false;
       }
     }
+    else if (req == "/data")
+    {
+      String sendIt = "{\"temperature\":\""+String(currTemperature)+"\",\"humidity\":\""+String(currHumidity)+"\",\"since_start\":\""+since_start+"\"}";
 
+      s = "HTTP/1.1 200 OK\n";
+      s += "Content-Type: application/json\n\n";
+      s += sendIt;
+      s += "\n";
+
+      client.print(s);
+    }
     /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
     else if (req == "/") // IFs to handle requests
     {
-      // Serial.println("bróh");
-      delay(15);
-
       s = "HTTP/1.1 200 OK\n";
       s += "Content-Type: text/html\n\n";
       s += index_html;
       s += "\n";
 
       client.print(s);
-      // Serial.println(canLoad);
-      // Serial.println(canVideo);
-      delay(100);
+
+      delay(50);
 
       if (canLoad == true)
       {
@@ -432,6 +425,7 @@ void http_resp()
         live_client.print("Access-Control-Allow-Origin: *\n");
         live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
         live_client.flush();
+
         canUpload = true;
         connected = true;
         canVideo = true;
@@ -441,7 +435,6 @@ void http_resp()
       {
         canVideo = true;
       }
-      //  client.stop();
     }
 
     else if (req == "/video")
@@ -450,7 +443,7 @@ void http_resp()
 
       if (canVideo == true)
       {
-        // Serial.println("VIDEO"); //Manually (request from site after manual click by user) load of video
+        // Manually (request from site after manual click by user) load of video
 
         live_client = client;
 
@@ -481,16 +474,10 @@ void http_resp()
     }
     else if (req == "/gosleep")
     {
-      // Serial.println("Going to sleep now");
-      //  digitalWrite(WAKEUP,HIGH);
-      // digitalWrite(PRZOD,LOW);
-      //  digitalWrite(LEWO,LOW);
-      //  digitalWrite(TYL,LOW);
-      //  digitalWrite(PRAWO,LOW);
-      // delay(100);
-      // digitalWrite(WAKEUP,LOW);
-      //  pinMode(WAKEUP,INPUT);
+      Serial.println("Going to sleep now");
+
       delay(500);
+
       esp_deep_sleep_start();
     }
     else if (req == "/sendData")
@@ -500,29 +487,153 @@ void http_resp()
     else
     {
       if (req != "/favicon.ico")
-        hspiCommand(req + "\n");
+        send_data(req);
     }
   }
   digitalWrite(33, LOW);
 }
 
-//---------------------LOOP FUNCTION----------------------------------------------------------------------------
+/*Setup function*/
+
+void setup()
+{
+
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+
+  Serial.begin(115200);
+
+  pinMode(33, OUTPUT); // Set LED pinMode
+
+  hspi = new SPIClass(HSPI);
+
+  if (!SPIFFS.begin(true))
+  {
+    // Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  // File root = SPIFFS.open("/");
+
+  // File file = root.openNextFile();
+
+  // while (file)
+  // {
+
+  //   // Serial.print("FILE: ");
+  //   // Serial.println(file.name());
+
+  //   file = root.openNextFile();
+  // }
+
+  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
+
+  int wifiTries = 0;
+
+  WiFi.setSleep(false);
+
+  // Trying to connect primary WiFi
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    if (wifiTries == 20)
+    {
+      break;
+    }
+
+    delay(500);
+    // Serial.print(".");
+    wifiTries++;
+  }
+
+  // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
+
+  if (wifiTries >= 20)
+  {
+    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(500);
+      // Serial.print(".");
+    }
+
+    wifiTries = NULL;
+  }
+
+  pinMode(HSPI_SS, OUTPUT);
+  // Serial.println("");
+  String IP = WiFi.localIP().toString();
+
+  index_html.replace("server_ip", IP);
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
+  //   printLocalTime();
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
+
+  server.begin();
+
+  configCamera();
+
+  // attachInterrupt(HSPI_MISO,read_data,HIGH);
+
+  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
+
+  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+  digitalWrite(HSPI_SS, LOW);
+
+
+}
+
+/*Loop function*/
 
 void loop()
-{ // LOOP
+{
+
   client = server.available();
 
   if (((millis() - lastTime) > timerDelay) && joystickState)
   {
-    // Check WiFi connection status
     http_request(1);
     lastTime = millis();
   }
-  // Serial.println(ESP.getFreeHeap());
+
+  if (millis() - prevMillisSPI >= 250)
+  {
+    read_data();
+    Serial.println(recData);
+    if (recivedDone == true)
+    {
+      hspi->endTransaction();
+      digitalWrite(HSPI_SS, HIGH);
+      String copyOfRecData = recData; // In case of recData = "" while operating on that string
+
+      int t_start = copyOfRecData.indexOf("t");
+      int h_start = copyOfRecData.indexOf("h");
+      int ss_start = copyOfRecData.lastIndexOf("s");
+      String temperature = copyOfRecData.substring(t_start+1,h_start);
+      String humidity = copyOfRecData.substring(h_start+1,ss_start-1);
+      String since_start_local = copyOfRecData.substring(ss_start+1,copyOfRecData.length());
+      recData = "";
+      Serial.print(temperature);
+      Serial.print(" ");
+      Serial.print(humidity);
+      Serial.print(" ");
+      Serial.print(since_start);
+      Serial.println(" ");
+      currTemperature = temperature.toInt();
+      currHumidity = humidity.toInt();
+      since_start = since_start_local;
+      recivedDone = false;
+      hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+      digitalWrite(HSPI_SS, LOW);
+    }
+    prevMillisSPI = millis();
+  }
+
   http_resp();
+
   if (connected == true)
   {
-    // //Serial.println("bruh");
     liveCam(live_client);
   }
 }

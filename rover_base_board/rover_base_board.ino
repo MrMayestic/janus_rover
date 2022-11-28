@@ -1,5 +1,11 @@
 #include <Servo.h>
 #include <SPI.h>
+
+#define DATAOUT 51    // MOSI
+#define DATAIN 50     // MISO
+#define SPICLOCK 52   // sck
+#define CHIPSELECT 53 // ss
+
 /*define channel enable output pins*/
 #define ENA 5 // Left  wheel speed
 #define ENB 6 // Right wheel speed
@@ -16,44 +22,51 @@
 
 #define servopin 3
 
+int deg = 0;
+
+int xPos, yPos, tPos;
+
+static const int spiClk = 10000000; // Clock for SPI
+
+unsigned long prevMillisJOY = 0;
+unsigned long prevMillisUSS = 0;
+
+unsigned int joystickInterval = 500;
+unsigned int ultrasonicInterval = 100;
+
 long duration; // variable for the duration of sound wave travel
 int distance;  // variable for the distance measurement
 
 bool colideToggle = false;
 bool doesForward = false;
 
-bool toggle = false;
-void (*resetFunc)(void) = 0;
-// const int RECV_PIN = 12;
-// IRrecv irrecv(RECV_PIN);
-// decode_results results;
-
-char buff[48];
-
-volatile byte index;
-volatile bool receivedone; /* use reception complete flag */
-
-Servo myservo;
-
-String message;
-
 bool waiter = false;
 bool xToggle = false;
 
-unsigned long val;
-unsigned long preMillis;
+volatile bool receivedone; /* use reception complete flag */
 
-int deg = 0;
+String data;
+String dataRec;
 
-// Joystick variables
 String xValue, yValue, tValue;
-int xPos, yPos, tPos;
-int xVal;
-int yVal;
 
-/**
- * BEGIN DEFINING FUNCTIONS
- */
+char buffer[32];
+
+byte clr;
+volatile byte index;
+
+uint8_t oldsrg;
+uint8_t c;
+uint8_t recived;
+
+void (*resetFunc)(void) = 0;
+
+Servo myservo;
+
+// const int RECV_PIN = 12;
+// IRrecv irrecv(RECV_PIN);
+
+/* BEGIN DEFINING FUNCTIONS */
 
 void forward()
 {
@@ -126,8 +139,8 @@ void stoper()
 
 void SerPls()
 {
-  // Serial.println("plusik");
   deg = myservo.read() + 45;
+
   if (deg < 175)
   {
     myservo.write(deg);
@@ -141,8 +154,8 @@ void SerPls()
 
 void SerMin()
 {
-  // Serial.println("minusik");
   deg = myservo.read() - 45;
+
   if (deg > 0)
   {
     myservo.write(deg);
@@ -159,21 +172,25 @@ void SerMin()
 unsigned int getDistance(void)
 { // Getting distance
   digitalWrite(TRIG_PIN, LOW);
+
   delayMicroseconds(2);
+
   // Sets the trigPin HIGH (ACTIVE) for 10 microseconds
   digitalWrite(TRIG_PIN, HIGH);
+
   delayMicroseconds(10);
+
   digitalWrite(TRIG_PIN, LOW);
   // Reads the echoPin, returns the sound wave travel time in microseconds
   duration = pulseIn(ECHO_PIN, HIGH);
   // Calculating the distance
   distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
   // Displays the distance on the Serial Monitor
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
+  // Serial.print("Distance: ");
+  // Serial.print(distance);
+  // Serial.println(" cm");
 
-  return distance;
+  return 50;
 }
 
 // Function for joystick steering. X,Y are coordinates and mode is to tell program how rover's engines should be set in order to move along the appropriate axis.
@@ -232,67 +249,41 @@ void joystickSterring(int x, int y, int mode)
   }
 }
 
-void setup()
+void fill_buffer(String data)
 {
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(5200);
-  digitalWrite(LED_BUILTIN, LOW);
-  // irrecv.enableIRIn();
-  // irrecv.blink13(true);
-  myservo.attach(servopin, 560, 2000);
-  myservo.write(0);
-
-  deg = myservo.read();
-
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
-
-  pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
-  pinMode(ECHO_PIN, INPUT);  // Sets the echoPin as an INPUT
-
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH);
-
-  delay(100);
-
-  SPCR |= bit(SPE); /* Enable SPI */
-
-  pinMode(MISO, OUTPUT); /* Make MISO pin as OUTPUT */
-  pinMode(MOSI, INPUT);
-
-  index = 0;
-  receivedone = false;
-
-  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
-  SPI.attachInterrupt(); /* Attach SPI interrupt */
-
-  delay(50);
-
-  Serial.begin(19200);
-  Serial.println("START");
+  data.toCharArray(buffer, data.length() + 1);
 }
 
-//-------------------------------------------------------------------------------------------
-
-void SPIHandler(String messageRaw)
+void sendData(String data)
 {
-  message = "";
+  fill_buffer(data);
+  delayMicroseconds(4);
+  SPI.transfer((uint8_t)4);
+  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
 
-  for (int i = 0; i <= messageRaw.length() - 2; i++)
+  // while (digitalRead(CHIPSELECT) == 1)
+  // {
+  //   ;
+  // }
+
+  for (int i = 0; i <= data.length() + 1; i++)
   {
-    message = message + messageRaw[i];
+    delayMicroseconds(3);
+    // Serial.print((uint8_t)buffer[i]);
+    // Serial.print(" ");
+    SPI.transfer((uint8_t)buffer[i]); // write data byte
   }
+  delayMicroseconds(4);
+  SPI.transfer((uint8_t)4);
 
-  Serial.println(message);
-  message = String(message);
+  // SPI.endTransaction();
+}
 
+/*Function that handles messages from Master for example: to steering*/
+
+void requestsHandler(String message)
+{
+  delay(1);
   if (message.indexOf("x") != -1)
   {
     xPos = 0;
@@ -307,8 +298,7 @@ void SPIHandler(String messageRaw)
     tPos = message.indexOf("t");
 
     tValue = message[tPos + 1];
-    // Serial.println(xPos);
-    // Serial.println(yPos);
+
     for (int i = xPos + 1; i < yPos; i++)
     {
       xValue = xValue + message[i];
@@ -318,12 +308,15 @@ void SPIHandler(String messageRaw)
     {
       yValue = yValue + message[i];
     }
-    // Serial.print(xValue.toInt());
-    // Serial.print("\t");
-    // Serial.print(yValue.toInt());
-    // Serial.print("\t");
-    // Serial.println(tValue.toInt());
+
     joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
+  }
+  else if (message == "sendData")
+  {
+    Serial.println("aha");
+    memset(buffer, 0, sizeof(buffer));
+    delay(1);
+    sendData("_t21h34ss003614");
   }
   else if (message == "/1")
   {
@@ -485,57 +478,113 @@ void SPIHandler(String messageRaw)
   }
 }
 
-//-------------------------------------------------------------------------------------------
+void setup()
+{
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(1000);
+  digitalWrite(LED_BUILTIN, LOW);
+  // irrecv.enableIRIn();
+  // irrecv.blink13(true);
+  myservo.attach(servopin, 560, 2000);
+  myservo.write(0);
+
+  deg = myservo.read();
+
+  pinMode(MISO, INPUT);
+  pinMode(MISO, OUTPUT);
+  pinMode(SPICLOCK, INPUT);
+  pinMode(CHIPSELECT, INPUT);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
+  pinMode(ECHO_PIN, INPUT);  // Sets the echoPin as an INPUT
+
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+
+  delay(100);
+
+  SPCR |= _BV(SPE);
+
+  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+  SPI.attachInterrupt(); /* Attach SPI interrupt */
+
+  index = 0;
+  receivedone = false;
+
+  delay(50);
+
+  Serial.begin(57600);
+  Serial.println("START");
+}
+
+/*Loop function*/
 
 void loop()
 {
-  // Serial.println("co");
-  delay(15);
-
-  if (receivedone) /* Check and print received buffer if any */
+  // Serial.println("test");
+  if (millis() - prevMillisJOY >= 500)
   {
-    buff[index] = 0;
-    Serial.println(buff);
-    SPIHandler(String(buff));
-
-    index = 0;
-    receivedone = false;
+    memset(buffer, 0, sizeof(buffer));
+    delay(1);
+    sendData("_t21h34ss003614");
+    // sendData("test");
+    prevMillisJOY = millis();
   }
-
-  if (getDistance() < 30)
+  if (millis() - prevMillisUSS >= ultrasonicInterval)
   {
-
-    if ((colideToggle == false) && doesForward == true)
+    if (getDistance() < 30)
     {
-      stoper();
-    }
 
-    colideToggle = true;
-  }
-  else
-  {
-    colideToggle = false;
+      if ((colideToggle == false) && doesForward == true)
+      {
+        stoper();
+      }
+      colideToggle = true;
+    }
+    else
+    {
+      colideToggle = false;
+    }
+    prevMillisUSS = millis();
   }
 }
 
-// Handler for SPI communication
+/* ISR that handles reciving data via SPI from Master */
 
 ISR(SPI_STC_vect)
 {
-  uint8_t oldsrg = SREG;
+  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+  oldsrg = SREG;
+
   cli();
-  char c = SPDR;
-  // String jojko = "Hello\n";
-  // Serial.println(jojko.toInt());
-  // Serial.println(String(c));
-  if (index < sizeof buff)
+
+  c = SPDR;
+
+  if (index <= 32)
   {
-    buff[index++] = c;
-    // Serial.println(c);
-    if (c == '\n')
-    { /* Check for newline character as end of msg */
-      receivedone = true;
+    if ((int)c < 128 && (int)c > 31)
+    {
+      dataRec += (char)c;
+    }
+    if (c == 4)
+    {
+      Serial.print("Dane otrzymane u slavea: ");
+      Serial.println(dataRec);
+      requestsHandler(dataRec);
+      index = 0;
+      dataRec = "";
     }
   }
   SREG = oldsrg;
+  // SPI.endTransaction();
 }

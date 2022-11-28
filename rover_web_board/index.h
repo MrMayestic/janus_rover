@@ -161,8 +161,8 @@ const char MAIN_page[] PROGMEM = R"=====(
 
       function streamOn() {
         setTimeout(function () { }, 350);
-        //   document.getElementById("content").innerHTML =
-        //     '<img id="images" style="transform: rotate(180deg); margin-left: 3px;" src="video">';
+          document.getElementById("content").innerHTML =
+            '<img id="images" style="transform: rotate(180deg); margin-left: 3px;" src="video">';
       }
 
       function zmien() {
@@ -191,7 +191,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           var xhttp = new XMLHttpRequest();
           xhttp.open("GET", what, true);
           xhttp.send();
-          setTimeout(function () { }, 150);
+          setTimeout(function () { }, 50);
           sendDataToggle = true;
         }
         if (what == "upload") {
