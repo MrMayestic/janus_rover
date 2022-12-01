@@ -1,6 +1,10 @@
 #include <Servo.h>
 #include <SPI.h>
 
+#include "dht.h"
+#define dht_apin 22
+dht DHT;
+
 #define DATAOUT 51    // MOSI
 #define DATAIN 50     // MISO
 #define SPICLOCK 52   // sck
@@ -26,13 +30,16 @@ int deg = 0;
 
 int xPos, yPos, tPos;
 
-static const int spiClk = 10000000; // Clock for SPI
+// static const int spiClk = 10000000; // Clock for SPI
 
 unsigned long prevMillisJOY = 0;
 unsigned long prevMillisUSS = 0;
 
-unsigned int joystickInterval = 500;
+unsigned int joystickInterval = 250;
 unsigned int ultrasonicInterval = 100;
+
+int currTemp = 0;
+int currHumi = 0;
 
 long duration; // variable for the duration of sound wave travel
 int distance;  // variable for the distance measurement
@@ -190,7 +197,7 @@ unsigned int getDistance(void)
   // Serial.print(distance);
   // Serial.println(" cm");
 
-  return 50;
+  return distance;
 }
 
 // Function for joystick steering. X,Y are coordinates and mode is to tell program how rover's engines should be set in order to move along the appropriate axis.
@@ -251,31 +258,19 @@ void joystickSterring(int x, int y, int mode)
 
 void fill_buffer(String data)
 {
-  data.toCharArray(buffer, data.length() + 1);
+  for (int i = 0; i <= data.length(); i++)
+  {
+    buffer[i] = (uint8_t)data[i];
+  }
 }
 
 void sendData(String data)
 {
   fill_buffer(data);
-  delayMicroseconds(4);
+
+  SPI.transfer(buffer, data.length() + 1);
+  // delayMicroseconds(5);
   SPI.transfer((uint8_t)4);
-  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-
-  // while (digitalRead(CHIPSELECT) == 1)
-  // {
-  //   ;
-  // }
-
-  for (int i = 0; i <= data.length() + 1; i++)
-  {
-    delayMicroseconds(3);
-    // Serial.print((uint8_t)buffer[i]);
-    // Serial.print(" ");
-    SPI.transfer((uint8_t)buffer[i]); // write data byte
-  }
-  delayMicroseconds(4);
-  SPI.transfer((uint8_t)4);
-
   // SPI.endTransaction();
 }
 
@@ -313,10 +308,9 @@ void requestsHandler(String message)
   }
   else if (message == "sendData")
   {
-    Serial.println("aha");
+    // Serial.println("aha");
     memset(buffer, 0, sizeof(buffer));
-    delay(1);
-    sendData("_t21h34ss003614");
+    sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
   }
   else if (message == "/1")
   {
@@ -470,12 +464,49 @@ void requestsHandler(String message)
   else if (message == "/servoplus")
   {
     SerPls();
-    Serial.println("servo");
+    // Serial.println("servo");
   }
   else if (message == "/servominus")
   {
     SerMin();
   }
+}
+
+String getReadableTime()
+{
+  String readableTime;
+
+  unsigned long currentMillis;
+  unsigned long seconds;
+  unsigned long minutes;
+  unsigned long hours;
+  unsigned long days;
+
+  currentMillis = millis();
+  seconds = currentMillis / 1000;
+  minutes = seconds / 60;
+  hours = minutes / 60;
+  days = hours / 24;
+  currentMillis %= 1000;
+  seconds %= 60;
+  minutes %= 60;
+  hours %= 24;
+
+  readableTime += String(hours) + ":";
+
+  if (minutes < 10)
+  {
+    readableTime += "0";
+  }
+  readableTime += String(minutes) + ":";
+
+  if (seconds < 10)
+  {
+    readableTime += "0";
+  }
+  readableTime += String(seconds);
+
+  return readableTime;
 }
 
 void setup()
@@ -517,7 +548,6 @@ void setup()
 
   // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   SPI.attachInterrupt(); /* Attach SPI interrupt */
-
   index = 0;
   receivedone = false;
 
@@ -531,20 +561,41 @@ void setup()
 
 void loop()
 {
+  delayMicroseconds(1);
   // Serial.println("test");
   if (millis() - prevMillisJOY >= 500)
   {
-    memset(buffer, 0, sizeof(buffer));
-    delay(1);
-    sendData("_t21h34ss003614");
-    // sendData("test");
+    DHT.read11(dht_apin);
+
     prevMillisJOY = millis();
+
+    bool changedToggle = false;
+
+    if ((int)DHT.temperature != currTemp)
+    {
+      currTemp = (int)DHT.temperature;
+      changedToggle = true;
+    }
+    if ((int)DHT.humidity != currHumi)
+    {
+      currHumi = (int)DHT.humidity;
+      changedToggle = true;
+    }
+    if (changedToggle)
+    {
+      // Serial.println(currTemp);
+      // Serial.println(currHumi);
+      memset(buffer, 0, sizeof(buffer));
+      sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
+    }
+
+    // sendData("test");
   }
   if (millis() - prevMillisUSS >= ultrasonicInterval)
   {
+
     if (getDistance() < 30)
     {
-
       if ((colideToggle == false) && doesForward == true)
       {
         stoper();
@@ -578,8 +629,8 @@ ISR(SPI_STC_vect)
     }
     if (c == 4)
     {
-      Serial.print("Dane otrzymane u slavea: ");
-      Serial.println(dataRec);
+      // Serial.print("Dane otrzymane u slavea: ");
+      // Serial.println(dataRec);
       requestsHandler(dataRec);
       index = 0;
       dataRec = "";

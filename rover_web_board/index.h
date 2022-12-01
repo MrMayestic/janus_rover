@@ -1,4 +1,4 @@
-#include "Arduino.h" 
+#include "Arduino.h"
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html>
@@ -22,9 +22,9 @@ const char MAIN_page[] PROGMEM = R"=====(
     .button {
       color: black;
       text-align: center;
-      width: 5em;
-      height: 5em;
-      margin: 1px;
+      width: 4vw;
+      height: 4vw;
+      margin: 0.15vw;
       user-select: none;
       border: 2px solid black;
       border-radius: 8px;
@@ -51,6 +51,24 @@ const char MAIN_page[] PROGMEM = R"=====(
       justify-content: center;
     }
 
+    #sterringButtons>button {
+      margin: 0.5vw;
+      background-color: rgb(67, 73, 88);
+      color: white;
+      height: 1.7vw;
+      width: 9vw;
+      border-radius: 0.5em;
+    }
+
+    #sterringButtons>div>button {
+      margin: 0.5vw;
+      background-color: rgb(67, 73, 88);
+      color: white;
+      height: 1.7vw;
+      width: 8vw;
+      border-radius: 0.5em;
+    }
+
     .sterButton {
       margin: 5px;
     }
@@ -72,6 +90,30 @@ const char MAIN_page[] PROGMEM = R"=====(
 
     #info {
       margin-top: 3em;
+    }
+
+    #measures {
+      font-size: 1.8vw;
+      text-align: center;
+    }
+
+    .column {
+      float: left;
+      width: 50%;
+    }
+
+    .row:after {
+      content: "";
+      display: table;
+      clear: both;
+    }
+
+    #temp {
+      margin-left: 43vw;
+    }
+
+    #humi {
+      margin-right: 43vw;
     }
   </style>
 </head>
@@ -125,6 +167,15 @@ const char MAIN_page[] PROGMEM = R"=====(
           <button type="button" id="sendData">Send Data</button>
         </div>
       </div>
+      <br>
+      <div id="measures">
+        <div class="column">
+          <p class="measure" id="temp">23</p>
+        </div>
+        <div class="column">
+          <p class="measure" id="humi">35</p>
+        </div>
+      </div>
     </article>
   </main>
   <article>
@@ -154,18 +205,20 @@ const char MAIN_page[] PROGMEM = R"=====(
 
     const deviceType = dewajs();
     window.onload = function () {
+
       console.log(deviceType);
-      function Nic() {
+
+      function streamOff() {
         document.getElementById("content").innerHTML = " ";
       }
 
       function streamOn() {
         setTimeout(function () { }, 350);
-          document.getElementById("content").innerHTML =
-            '<img id="images" style="transform: rotate(180deg); margin-left: 3px;" src="video">';
+        document.getElementById("content").innerHTML =
+          '<img id="images" style="transform: rotate(180deg); margin-left: 3px;" src="http://192.168.1.44/video">';
       }
 
-      function zmien() {
+      function change() {
         if (style == "dark") {
           style = "bright";
           document.body.style.backgroundColor = "#2a2d36";
@@ -173,6 +226,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           darkLight.style.color = "#2a2d36";
           darkLight.innerHTML = "&#9788";
           h1.style.color = "white";
+          document.querySelector('#measures').style.color = "black";
         } else if (style == "bright") {
           style = "dark";
           document.body.style.backgroundColor = "white";
@@ -180,22 +234,40 @@ const char MAIN_page[] PROGMEM = R"=====(
           darkLight.style.color = "white";
           darkLight.innerHTML = "&#9790";
           h1.style.color = "black";
+          document.querySelector('#measures').style.color = "white";
         }
       }
 
       function sendData(what) {
         if (sendDataToggle) {
           sendDataToggle = false;
-          console.log(what);
           document.getElementById("info").innerHTML = what;
-          var xhttp = new XMLHttpRequest();
-          xhttp.open("GET", what, true);
-          xhttp.send();
+          console.log(what);
+          fetch("http://192.168.1.44/" + what, {
+            method: "GET",
+            mode: "cors",
+            headers: {
+              "Access-Control-Request-Method": "*",
+              "Access-Control-Allow-Origin": "*",
+              "Vary": "*",
+            },
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              console.log(data.temperature,data.humidity);
+              if (data.temperature > 0 && data.temperature < 50) {
+                document.querySelector("#temp").innerHTML = `${data.temperature}&#176;C`;
+              }
+              if (data.humidity > 0 && data.temperature <= 100) {
+                document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+              }
+            });
+
           setTimeout(function () { }, 50);
           sendDataToggle = true;
         }
         if (what == "upload") {
-          Nic();
+          streamOff();
           location.reload();
         }
       }
@@ -245,7 +317,7 @@ const char MAIN_page[] PROGMEM = R"=====(
             .getElementById("stop")
             .addEventListener("mousedown", function () {
               sendData("stop");
-              Nic();
+              streamOff();
             });
           document
             .getElementById("start")
@@ -271,7 +343,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("darkLight")
             .addEventListener("mousedown", function () {
-              zmien();
+              change();
             });
 
           document
@@ -390,14 +462,14 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("sendData")
             .addEventListener("mouseup", function () {
-              sendData("sendData");
-          });
+              sendData("data");
+            });
         } else {
           document
             .getElementById("stop")
             .addEventListener("touchstart", function () {
               sendData("stop");
-              Nic();
+              streamOff();
             });
           document
             .getElementById("start")
@@ -423,7 +495,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("darkLight")
             .addEventListener("touchstart", function () {
-              zmien();
+              change();
             });
 
           document
@@ -539,15 +611,18 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("sendData")
             .addEventListener("touchstart", function () {
-              sendData("sendData");
-          });
+              sendData("data");
+            });
         }
       }
       streamOn();
+
       sendData(0);
+
+      setInterval(function () { sendData("data"); }, 1500);
     };
 
-    setTimeout(function () { }, 100);
+    // setTimeout(function () { }, 100);
   </script>
 </body>
 

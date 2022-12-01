@@ -55,7 +55,7 @@ int currHumidity = 0;
 
 const int serverPort = server_port; // Server port
 
-static const int spiClk = 2000000; // Clock for SPI
+static const int spiClk = 3000000; // Clock for SPI
 
 unsigned long lastTime = 0;
 unsigned long timerDelay = 50;
@@ -66,6 +66,8 @@ unsigned int SPIinterval = 50;
 bool canVideo = false;
 bool canLoad = false;
 bool canUpload = true;
+
+bool uploadNeeded = false;
 
 bool connected = true;
 
@@ -90,9 +92,9 @@ String index_html = MAIN_page; // Load client site (HTML,CSS,JS)
 
 char sendBuff[32];
 
-WiFiClient live_client; // USTAWIENIE KLASY CLIENT
+WiFiClient live_client;
 WiFiClient client;
-WiFiServer server(serverPort); // USTAWIENIE SERWERA
+WiFiServer server(serverPort);
 
 /*SPI SECTION*/
 
@@ -127,14 +129,14 @@ void configCamera()
   config.pixel_format = PIXFORMAT_JPEG;
 
   config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 5; // 0-63 lower number means higher quality
+  config.jpeg_quality = 6; // 0-63 lower number means higher quality
   config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
 
   if (err != ESP_OK)
   {
-    // Serial.printf("Camera init failed with error 0x%x", err);
+    Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
 }
@@ -149,7 +151,7 @@ void liveCam(WiFiClient &client)
 
   if (!fb)
   {
-    // Serial.println("Frame buffer could not be acquired");
+    Serial.println("Frame buffer could not be acquired");
     return;
   }
 
@@ -195,6 +197,12 @@ void send_data(String stringMess)
   digitalWrite(HSPI_SS, HIGH);
 
   hspi->endTransaction();
+
+  delay(2);
+
+  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+
+  digitalWrite(HSPI_SS, HIGH);
   // Serial.println("sended it");
 }
 
@@ -203,27 +211,31 @@ void send_data(String stringMess)
 void read_data()
 {
   // Serial.println("read_data");
-
-  for (int i = 0; i <= 24; i++)
+  // digitalWrite(HSPI_SS, HIGH);
+  digitalWrite(HSPI_SS, LOW);
+  for (int i = 0; i <= 2; i++)
   {
-    delayMicroseconds(1);
+    // delayMicroseconds(5);
     c = hspi->transfer(NULL);
-    if ((int)c < 128 && (int)c > 31)
+
+    if (c < 128 && c > 31)
     {
       recData += (char)c;
     }
     // If c == 4 then it means end of message
     if (c == 4)
     {
-      Serial.print("Dane otrzymane: ");
-      Serial.println(recData);
+      // Serial.print("Dane otrzymane: ");
+      // Serial.println(recData);
       recivedDone = true;
-      digitalWrite(HSPI_SS, HIGH);
-      hspi->endTransaction();
+      // digitalWrite(HSPI_SS, HIGH);
+      // hspi->endTransaction();
       // return true;
     }
     // return false;
   }
+  digitalWrite(HSPI_SS, HIGH);
+  // digitalWrite(HSPI_SS, LOW);
 }
 
 /* HTTP request functions (for sending requests via HTTP) */
@@ -263,56 +275,26 @@ void http_request(int whichReq)
     }
     else if (whichReq == 10)
     {
-      send_data("sendData");
 
-      delay(5);
+      http.begin(sendDataPath.c_str());
 
-      Serial.println("while in a while");
+      http.addHeader("Content-Type", "text/plain");
 
-      bool readDataResult = false;
+      String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"since_start\":\"" + since_start + "\"}";
+      httpResponseCode = http.POST(sendIt);
 
-      read_data();
-      // while (recData.indexOf("h") )
-      // {
-      //   readDataResult = ;
-      //   delay(25);
-      // }
-
-      String copyOfRecData = recData; // In case of recData = "" while operating on that string
-      Serial.println(recData);
-      int t_start = copyOfRecData.indexOf("t");
-      int h_start = copyOfRecData.indexOf("h");
-      int ss_start = copyOfRecData.lastIndexOf("s");
-      String temperature = copyOfRecData.substring(t_start+1,h_start);
-      String humidity = copyOfRecData.substring(h_start+1,ss_start-1);
-      String since_start = copyOfRecData.substring(ss_start+1,copyOfRecData.length());
-      recData = "";
-      Serial.print(temperature);
-      Serial.print(" ");
-      Serial.print(humidity);
-      Serial.print(" ");
-      Serial.print(since_start);
-      Serial.println(" ");
-
-      // http.begin(sendDataPath.c_str());
-
-      // http.addHeader("Content-Type", "text/plain");
-
-      // String sendIt = "{\"temperature\":\"18.6\",\"humidity\":\"34\",\"since_start\":\"0:32:16\"}";
-      // httpResponseCode = http.POST(sendIt);
-
-      // if (httpResponseCode > 0)
-      // {
-      //   Serial.print("HTTP data Response code: ");
-      //   Serial.println(httpResponseCode);
-      // }
-      // else
-      // {
-      //   Serial.print("Error code: ");
-      //   Serial.println(httpResponseCode);
-      // }
-      // // Free resources
-      // http.end();
+      if (httpResponseCode > 0)
+      {
+        Serial.print("HTTP data Response code: ");
+        Serial.println(httpResponseCode);
+      }
+      else
+      {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
+      }
+      // Free resources
+      http.end();
     }
   }
   else
@@ -346,13 +328,13 @@ void http_resp()
     /* now we parse the request to see which page the client want */
     int addr_start;
 
-    if (req.indexOf("GET") != -1)
+    if (req.indexOf("OPTIONS") != -1)
     {
-      addr_start = req.indexOf("GET") + strlen("GET");
+      addr_start = req.indexOf("OPTIONS") + strlen("OPTIONS");
     }
     else
     {
-      addr_start = req.indexOf("HEAD") + strlen("HEAD");
+      addr_start = req.indexOf("GET") + strlen("GET");
     }
 
     int addr_end = req.indexOf("HTTP", addr_start);
@@ -373,7 +355,6 @@ void http_resp()
 
     if (req.indexOf("joy") != -1)
     {
-      // Serial.println("kuwa");
       String joyBool = "";
       int joyStart = req.indexOf("k");
 
@@ -396,9 +377,11 @@ void http_resp()
     }
     else if (req == "/data")
     {
-      String sendIt = "{\"temperature\":\""+String(currTemperature)+"\",\"humidity\":\""+String(currHumidity)+"\",\"since_start\":\""+since_start+"\"}";
+      String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"since_start\":\"" + since_start + "\"}";
 
       s = "HTTP/1.1 200 OK\n";
+      s += "Access-Control-Allow-Headers: *\n";
+      s += "Access-Control-Allow-Origin: *\n";
       s += "Content-Type: application/json\n\n";
       s += sendIt;
       s += "\n";
@@ -406,8 +389,8 @@ void http_resp()
       client.print(s);
     }
     /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
-    else if (req == "/") // IFs to handle requests
-    {
+    else if (req == "/")
+    { // IFs to handle requests
       s = "HTTP/1.1 200 OK\n";
       s += "Content-Type: text/html\n\n";
       s += index_html;
@@ -439,7 +422,7 @@ void http_resp()
 
     else if (req == "/video")
     {
-      delay(20);
+      delay(35);
 
       if (canVideo == true)
       {
@@ -461,14 +444,13 @@ void http_resp()
         canLoad = true;
       }
     }
-    else if (req == "/stop") // Stream off
-    {
+    else if (req == "/stop")
+    { // Stream off
       client.stop();
       connected = false;
     }
-    else if (req == "/start") // Stream on
-    {
-      // client.flush();
+    else if (req == "/start")
+    { // Stream on
       connected = true;
       live_client.flush();
     }
@@ -482,12 +464,23 @@ void http_resp()
     }
     else if (req == "/sendData")
     {
-      http_request(10);
+      send_data("sendData");
+      uploadNeeded = true;
     }
     else
     {
       if (req != "/favicon.ico")
+      {
         send_data(req);
+
+        s = "HTTP/1.1 200 OK\n";
+        s += "Access-Control-Allow-Headers: *\n";
+        s += "Access-Control-Allow-Origin: *\n";
+        s += "Content-Type: text/plain\n\n";
+        s += "thanks";
+        s += "\n";
+        client.print(s);
+      }
     }
   }
   digitalWrite(33, LOW);
@@ -569,10 +562,11 @@ void setup()
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
   //   printLocalTime();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
-
-  server.begin();
-
+  // server.enableCORS();
+  delay(10);
   configCamera();
+  delay(20);
+  server.begin();
 
   // attachInterrupt(HSPI_MISO,read_data,HIGH);
 
@@ -580,8 +574,7 @@ void setup()
 
   hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   digitalWrite(HSPI_SS, LOW);
-
-
+  delay(150);
 }
 
 /*Loop function*/
@@ -597,41 +590,55 @@ void loop()
     lastTime = millis();
   }
 
-  if (millis() - prevMillisSPI >= 250)
+  if (millis() - prevMillisSPI >= 1)
   {
+
     read_data();
     Serial.println(recData);
     if (recivedDone == true)
     {
-      hspi->endTransaction();
-      digitalWrite(HSPI_SS, HIGH);
+
+      // hspi->endTransaction();
+      // digitalWrite(HSPI_SS, HIGH);
       String copyOfRecData = recData; // In case of recData = "" while operating on that string
 
       int t_start = copyOfRecData.indexOf("t");
       int h_start = copyOfRecData.indexOf("h");
       int ss_start = copyOfRecData.lastIndexOf("s");
-      String temperature = copyOfRecData.substring(t_start+1,h_start);
-      String humidity = copyOfRecData.substring(h_start+1,ss_start-1);
-      String since_start_local = copyOfRecData.substring(ss_start+1,copyOfRecData.length());
+      String temperature = copyOfRecData.substring(t_start + 1, h_start);
+      String humidity = copyOfRecData.substring(h_start + 1, ss_start - 1);
+      String since_start_local = copyOfRecData.substring(ss_start + 1, copyOfRecData.length());
       recData = "";
-      Serial.print(temperature);
-      Serial.print(" ");
-      Serial.print(humidity);
-      Serial.print(" ");
-      Serial.print(since_start);
-      Serial.println(" ");
-      currTemperature = temperature.toInt();
-      currHumidity = humidity.toInt();
+      // Serial.print(temperature);
+      // Serial.print(" ");
+      // Serial.print(humidity);
+      // Serial.print(" ");
+      // Serial.print(since_start);
+      // Serial.println(" ");
+      if (temperature.toInt() > 0 && temperature.toInt() < 50)
+      {
+        currTemperature = temperature.toInt();
+      }
+      if (humidity.toInt() > 0 && humidity.toInt() <= 100)
+      {
+        currHumidity = humidity.toInt();
+      }
+
       since_start = since_start_local;
       recivedDone = false;
-      hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-      digitalWrite(HSPI_SS, LOW);
+      if (uploadNeeded)
+      {
+        http_request(10);
+        uploadNeeded = false;
+      }
+      // hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+      // digitalWrite(HSPI_SS, LOW);
     }
     prevMillisSPI = millis();
   }
 
   http_resp();
-
+  // Serial.println(connected);
   if (connected == true)
   {
     liveCam(live_client);
@@ -693,8 +700,8 @@ String sendPhoto()
     size_t fbLen = fb->len;
     // Serial.println(fbLen);
 
-    for (size_t n = 0; n < fbLen; n = n + 1024) // Start sending image
-    {
+    for (size_t n = 0; n < fbLen; n = n + 1024)
+    { // Start sending image
       if (n + 1024 < fbLen)
       {
         live_client.write(fbBuf, 1024);
