@@ -142,7 +142,7 @@ void configCamera()
 }
 
 /*Handler for live transmission from camera*/
-
+String liveS;
 void liveCam(WiFiClient &client)
 {
 
@@ -154,9 +154,9 @@ void liveCam(WiFiClient &client)
     Serial.println("Frame buffer could not be acquired");
     return;
   }
-
-  client.print("--frame\n");
-  client.print("Content-Type: image/jpeg\n\n");
+  liveS = "--frame\n";
+  liveS += "Content-Type: image/jpeg\n\n";
+  client.print(liveS);
   client.flush();
   client.write(fb->buf, fb->len);
   client.flush();
@@ -171,13 +171,7 @@ void send_data(String stringMess)
 {
   memset(sendBuff, 0, sizeof(sendBuff)); // Clearing send buffor to avoid messy chars
 
-  hspi->endTransaction();
-  digitalWrite(HSPI_SS, HIGH);
-  delay(2);
-
   stringMess.toCharArray(sendBuff, stringMess.length() + 1);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
 
   digitalWrite(HSPI_SS, LOW);
 
@@ -196,13 +190,6 @@ void send_data(String stringMess)
 
   digitalWrite(HSPI_SS, HIGH);
 
-  hspi->endTransaction();
-
-  delay(2);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-
-  digitalWrite(HSPI_SS, HIGH);
   // Serial.println("sended it");
 }
 
@@ -213,7 +200,7 @@ void read_data()
   // Serial.println("read_data");
   // digitalWrite(HSPI_SS, HIGH);
   digitalWrite(HSPI_SS, LOW);
-  for (int i = 0; i <= 2; i++)
+  for (int i = 0; i <= 3; i++)
   {
     // delayMicroseconds(5);
     c = hspi->transfer(NULL);
@@ -398,7 +385,7 @@ void http_resp()
 
       client.print(s);
 
-      delay(50);
+      delay(10);
 
       if (canLoad == true)
       {
@@ -422,7 +409,7 @@ void http_resp()
 
     else if (req == "/video")
     {
-      delay(35);
+      delay(10);
 
       if (canVideo == true)
       {
@@ -505,6 +492,15 @@ void setup()
     return;
   }
 
+  pinMode(HSPI_SS, OUTPUT);
+  delay(1);
+
+  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
+
+  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
+  digitalWrite(HSPI_SS, LOW);
+  delay(150);
+  send_data("/0");
   // File root = SPIFFS.open("/");
 
   // File file = root.openNextFile();
@@ -553,7 +549,7 @@ void setup()
     wifiTries = NULL;
   }
 
-  pinMode(HSPI_SS, OUTPUT);
+
   // Serial.println("");
   String IP = WiFi.localIP().toString();
 
@@ -569,12 +565,6 @@ void setup()
   server.begin();
 
   // attachInterrupt(HSPI_MISO,read_data,HIGH);
-
-  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-  digitalWrite(HSPI_SS, LOW);
-  delay(150);
 }
 
 /*Loop function*/

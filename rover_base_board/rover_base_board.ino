@@ -34,15 +34,19 @@ int xPos, yPos, tPos;
 
 unsigned long prevMillisJOY = 0;
 unsigned long prevMillisUSS = 0;
+unsigned long prevMillisSEND = 0;
+unsigned long prevMillisSTOP = 0;
+
+unsigned long timeToStop = -1;
 
 unsigned int joystickInterval = 250;
-unsigned int ultrasonicInterval = 100;
+unsigned int ultrasonicInterval = 50;
 
 int currTemp = 0;
 int currHumi = 0;
 
-long duration; // variable for the duration of sound wave travel
-int distance;  // variable for the distance measurement
+unsigned long duration; // variable for the duration of sound wave travel
+int distance;           // variable for the distance measurement
 
 bool colideToggle = false;
 bool doesForward = false;
@@ -185,7 +189,7 @@ unsigned int getDistance(void)
   // Sets the trigPin HIGH (ACTIVE) for 10 microseconds
   digitalWrite(TRIG_PIN, HIGH);
 
-  delayMicroseconds(10);
+  delay(3);
 
   digitalWrite(TRIG_PIN, LOW);
   // Reads the echoPin, returns the sound wave travel time in microseconds
@@ -278,7 +282,6 @@ void sendData(String data)
 
 void requestsHandler(String message)
 {
-  delay(1);
   if (message.indexOf("x") != -1)
   {
     xPos = 0;
@@ -330,131 +333,132 @@ void requestsHandler(String message)
   }
   else if (message == "/lprec1")
   {
+
     forward();
 
-    delay(800);
+    timeToStop = 800;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/lprec2")
   {
     left();
 
-    delay(800);
+    timeToStop = 800;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/lprec3")
   {
     back();
 
-    delay(800);
+    timeToStop = 800;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/lprec4")
   {
     right();
 
-    delay(800);
+    timeToStop = 800;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/prec1")
   {
     forward();
 
-    delay(500);
+    timeToStop = 500;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/prec2")
   {
     left();
 
-    delay(500);
+    timeToStop = 500;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/prec3")
   {
     back();
 
-    delay(500);
+    timeToStop = 500;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/prec4")
   {
     right();
 
-    delay(500);
+    timeToStop = 500;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/sprec1")
   {
     forward();
 
-    delay(150);
+    timeToStop = 150;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/sprec2")
   {
     left();
 
-    delay(150);
+    timeToStop = 150;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/sprec3")
   {
     back();
 
-    delay(150);
+    timeToStop = 150;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/sprec4")
   {
     right();
 
-    delay(150);
+    timeToStop = 150;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/uprec1")
   {
     forward();
 
-    delay(85);
+    timeToStop = 85;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/uprec2")
   {
     left();
 
-    delay(85);
+    timeToStop = 85;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/uprec3")
   {
     back();
 
-    delay(85);
+    timeToStop = 85;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/uprec4")
   {
     right();
 
-    delay(85);
+    timeToStop = 85;
 
-    stoper();
+    prevMillisSTOP = millis();
   }
   else if (message == "/0") // USTAWIENIE PINOW NA LOW ABY WYLACZYC RUCH LAZIKA
   {
@@ -561,13 +565,21 @@ void setup()
 
 void loop()
 {
-  delayMicroseconds(1);
   // Serial.println("test");
-  if (millis() - prevMillisJOY >= 500)
+  if (timeToStop > 0)
+  {
+    if (millis() - prevMillisSTOP >= timeToStop)
+    {
+      stoper();
+      timeToStop = -1;
+    }
+  }
+
+  if (millis() - prevMillisSEND >= 500)
   {
     DHT.read11(dht_apin);
 
-    prevMillisJOY = millis();
+    prevMillisSEND = millis();
 
     bool changedToggle = false;
 
@@ -596,14 +608,19 @@ void loop()
 
     if (getDistance() < 30)
     {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delayMicroseconds(5);
       if ((colideToggle == false) && doesForward == true)
       {
         stoper();
+        delayMicroseconds(5);
       }
       colideToggle = true;
+      delay(750);
     }
     else
     {
+      digitalWrite(LED_BUILTIN, LOW);
       colideToggle = false;
     }
     prevMillisUSS = millis();
@@ -629,9 +646,13 @@ ISR(SPI_STC_vect)
     }
     if (c == 4)
     {
-      // Serial.print("Dane otrzymane u slavea: ");
-      // Serial.println(dataRec);
-      requestsHandler(dataRec);
+      Serial.print("Dane otrzymane u slavea: ");
+      Serial.println(dataRec);
+      Serial.println();
+      if (dataRec.length() > 0)
+      {
+        requestsHandler(dataRec);
+      }
       index = 0;
       dataRec = "";
     }

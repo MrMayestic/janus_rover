@@ -3,7 +3,7 @@ const app = express();
 const bodyParser = require("body-parser");
 const mysql = require("mysql");
 
-require('dotenv').config();
+require("dotenv").config();
 
 console.log(process.env.HOST);
 
@@ -11,12 +11,15 @@ var con = mysql.createConnection({
   host: process.env.HOST,
   user: process.env.USER,
   password: process.env.PASSWORD,
-  database: process.env.DATABASE
+  database: process.env.DATABASE,
 });
 
 con.connect(function (err) {
-  if (err) throw err;
-  console.log("Connected!");
+  if (err) {
+    console.log("Error \n", err);
+  } else {
+    console.log("Connected!");
+  }
 });
 
 app.use(express.urlencoded({ extended: true }));
@@ -46,6 +49,15 @@ app.post("/sendData", (req, res) => {
   con.query(sql, [values], function (err, result) {
     if (err) throw err;
     console.log("Number of records inserted: " + result.affectedRows);
+  });
+});
+
+app.use("/getData", (req, res) => {
+  console.log("getData");
+  con.query("SELECT * FROM jr_data", function (err, result, fields) {
+    if (err) console.log("Error when making SELECT", err);
+    console.log(result);
+    res.send(result);
   });
 });
 

@@ -22,9 +22,9 @@ const char MAIN_page[] PROGMEM = R"=====(
     .button {
       color: black;
       text-align: center;
-      width: 4vw;
-      height: 4vw;
-      margin: 0.15vw;
+      width: 76.8px;
+      height: 76.8px;
+      margin: 2.88px;
       user-select: none;
       border: 2px solid black;
       border-radius: 8px;
@@ -52,20 +52,20 @@ const char MAIN_page[] PROGMEM = R"=====(
     }
 
     #sterringButtons>button {
-      margin: 0.5vw;
+      margin: 10px;
       background-color: rgb(67, 73, 88);
       color: white;
-      height: 1.7vw;
-      width: 9vw;
+      height: 32px;
+      width: 172px;
       border-radius: 0.5em;
     }
 
     #sterringButtons>div>button {
-      margin: 0.5vw;
+      margin: 10px;
       background-color: rgb(67, 73, 88);
       color: white;
-      height: 1.7vw;
-      width: 8vw;
+      height: 32px;
+      width: 153px;
       border-radius: 0.5em;
     }
 
@@ -93,13 +93,27 @@ const char MAIN_page[] PROGMEM = R"=====(
     }
 
     #measures {
-      font-size: 1.8vw;
-      text-align: center;
+      font-size: 36px;
+      display: flex;
+      position: relative;
+      height: 100%;
+      width: 100%;
+      font-size: 30px;
+      justify-content: center;
+    }
+
+    #temp {
+      float: right
+    }
+
+    #humi {
+      float: left;
     }
 
     .column {
-      float: left;
-      width: 50%;
+      /* float: left;
+      width: 40/%; */
+      padding: 50px;
     }
 
     .row:after {
@@ -108,13 +122,12 @@ const char MAIN_page[] PROGMEM = R"=====(
       clear: both;
     }
 
-    #temp {
-      margin-left: 43vw;
+    #images {
+      width: 640px;
+      height: 480px;
     }
 
-    #humi {
-      margin-right: 43vw;
-    }
+    @media only screen and (max-width: 800px) {}
   </style>
 </head>
 
@@ -170,10 +183,10 @@ const char MAIN_page[] PROGMEM = R"=====(
       <br>
       <div id="measures">
         <div class="column">
-          <p class="measure" id="temp">23</p>
+          <p class="measure" id="temp">0&#176;C</p>
         </div>
         <div class="column">
-          <p class="measure" id="humi">35</p>
+          <p class="measure" id="humi">0%</p>
         </div>
       </div>
     </article>
@@ -205,10 +218,8 @@ const char MAIN_page[] PROGMEM = R"=====(
 
     const deviceType = dewajs();
     window.onload = function () {
-
       console.log(deviceType);
-
-      function streamOff() {
+      function Nic() {
         document.getElementById("content").innerHTML = " ";
       }
 
@@ -226,7 +237,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           darkLight.style.color = "#2a2d36";
           darkLight.innerHTML = "&#9788";
           h1.style.color = "white";
-          document.querySelector('#measures').style.color = "black";
+          document.querySelector('#measures').style.color = "white";
         } else if (style == "bright") {
           style = "dark";
           document.body.style.backgroundColor = "white";
@@ -234,7 +245,7 @@ const char MAIN_page[] PROGMEM = R"=====(
           darkLight.style.color = "white";
           darkLight.innerHTML = "&#9790";
           h1.style.color = "black";
-          document.querySelector('#measures').style.color = "white";
+          document.querySelector('#measures').style.color = "black";
         }
       }
 
@@ -254,7 +265,6 @@ const char MAIN_page[] PROGMEM = R"=====(
           })
             .then((response) => response.json())
             .then((data) => {
-              console.log(data.temperature,data.humidity);
               if (data.temperature > 0 && data.temperature < 50) {
                 document.querySelector("#temp").innerHTML = `${data.temperature}&#176;C`;
               }
@@ -263,11 +273,14 @@ const char MAIN_page[] PROGMEM = R"=====(
               }
             });
 
+          // var xhttp = new XMLHttpRequest();
+          // xhttp.open("GET", , true);
+          // xhttp.send();
           setTimeout(function () { }, 50);
           sendDataToggle = true;
         }
         if (what == "upload") {
-          streamOff();
+          Nic();
           location.reload();
         }
       }
@@ -317,7 +330,7 @@ const char MAIN_page[] PROGMEM = R"=====(
             .getElementById("stop")
             .addEventListener("mousedown", function () {
               sendData("stop");
-              streamOff();
+              Nic();
             });
           document
             .getElementById("start")
@@ -462,14 +475,14 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("sendData")
             .addEventListener("mouseup", function () {
-              sendData("data");
+              sendData("sendData");
             });
         } else {
           document
             .getElementById("stop")
             .addEventListener("touchstart", function () {
               sendData("stop");
-              streamOff();
+              Nic();
             });
           document
             .getElementById("start")
@@ -611,15 +624,13 @@ const char MAIN_page[] PROGMEM = R"=====(
           document
             .getElementById("sendData")
             .addEventListener("touchstart", function () {
-              sendData("data");
+              sendData("sendData");
             });
         }
       }
       streamOn();
-
       sendData(0);
-
-      setInterval(function () { sendData("data"); }, 1500);
+      setInterval(function () { sendData("data"); }, 1000);
     };
 
     // setTimeout(function () { }, 100);

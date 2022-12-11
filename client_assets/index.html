@@ -2,24 +2,676 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sterring</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <style>
+        /* DEAFULT MARGINS AND NAVBAR */
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: "Rubik", sans-serif;
+        }
+
+        #darkLight {
+            cursor: pointer;
+            clear: both;
+            text-align: center;
+            width: 42px;
+            height: 42px;
+            background-color: #2a2d36;
+            color: white;
+        }
+
+        #darkLight:hover {
+            filter: brightness(85%);
+        }
+
+        #lazikImg {
+            position: absolute;
+            height: 90px;
+            width: 132px;
+            margin-top: -10px;
+            text-align: center;
+            margin-left: 1.5%;
+        }
+
+        ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 1px;
+            overflow: hidden;
+            background-color: rgb(201, 1, 1);
+            display: flex;
+            align-self: center;
+            align-items: center;
+            flex-direction: row;
+            justify-content: center;
+        }
+
+        li {
+            text-align: center;
+            font-size: 36px;
+            width: 170px;
+            height: 73px;
+            font-weight: 500;
+            display: inline-block;
+            vertical-align: middle;
+            line-height: 73px;
+            color: white;
+            text-decoration: none;
+            transition: background-color 0.05s, border-radius 0.1s;
+            border: 1px solid red;
+        }
+
+        /* Change the link color to #111 (black) on hover */
+        li:hover {
+            background-color: #111;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+
+        /*END*/
+        #arrowSter {
+            margin-top: 25px;
+            margin-left: 34%;
+            display: flex;
+            flex-wrap: nowrap;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            float: left;
+            position: absolute;
+        }
+
+        #forward {
+            margin-bottom: -15px;
+        }
+
+        #servoPlus {
+            margin-top: 25px;
+        }
+
+        #servoSter {
+            margin-left: 61%;
+            max-height: 272.5px;
+            display: flex;
+            flex-wrap: nowrap;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            float: left;
+            position: absolute;
+        }
+
+        .sterButton {
+            color: black;
+            /* text-align: center; */
+            width: 115px;
+            height: 115px;
+            margin: 4.5px;
+            user-select: none;
+            border: 2px solid black;
+            border-radius: 8px;
+            background-color: #d1d1d1;
+        }
+
+        .sterButton:hover {
+            background-color: #c0c0c0;
+            cursor: pointer;
+        }
+
+        .servoButton {
+            color: black;
+            /* text-align: center; */
+            width: 70px;
+            height: 70px;
+            user-select: none;
+            border: 2px solid black;
+            border-radius: 8px;
+            background-color: #d1d1d1;
+        }
+
+        .servoButton:hover {
+            background-color: #c0c0c0;
+            cursor: pointer;
+        }
+
+        #servoInfo {
+            height: 65px;
+            line-height: 65px;
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        #content {
+            text-align: center;
+            margin: 2.5em;
+            padding: 0.5em;
+        }
+
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: rotate(175deg);
+        }
+
+        #onOffVideo {
+            background-color: red;
+            border: 2px solid black;
+            border-radius: 5px;
+            margin-left: 53%;
+            text-align: center;
+            width: 55px;
+            height: 45px;
+            color: rgb(217, 217, 217);
+            font-size: 0.85vw;
+        }
+
+        #onOffVideo:hover {
+            filter: brightness(85%);
+            cursor: pointer;
+        }
+
+        #precSterInfo {
+            font-size: 1.5vw;
+            text-align: center;
+            line-height: 38px;
+            float: left;
+            margin-left: 5%;
+        }
+
+        #precSter {
+            float: left;
+            width: 80px;
+            margin-left: 1%;
+            height: 40px;
+            font-size: 0.8vw;
+        }
+
+        #precSter:hover {
+            filter: brightness(85%);
+            cursor: pointer;
+        }
+
+        #measures {
+            font-size: 40px;
+            display: flex;
+            position: absolute;
+            height: 15%;
+            width: 100%;
+            justify-content: center;
+            margin-top: 360px;
+        }
+
+        #temp {
+            float: right;
+        }
+
+        #humi {
+            float: left;
+        }
+
+        .column {
+            /* float: left;
+      width: 40/%; */
+            padding: 50px;
+        }
+
+        .row:after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        @media only screen and (max-width: 1920px) {
+            li {
+                font-size: 30px;
+                width: 155px;
+                height: 60px;
+                font-weight: 500;
+                display: inline-block;
+                vertical-align: middle;
+                line-height: 60px;
+            }
+
+            #lazikImg {
+                position: absolute;
+                height: 78px;
+                width: 118px;
+                margin-top: -11px;
+                text-align: center;
+                margin-left: 1%;
+            }
+
+            #video {
+                width: 600px;
+                height: 450px;
+            }
+
+            .sterButton {
+                width: 95px;
+                height: 95px;
+                margin: 4px;
+            }
+
+            .servoButton {
+                width: 65px;
+                height: 65px;
+                margin: 3.5px;
+            }
+
+            #servoInfo {
+                height: 35px;
+                line-height: 35px;
+                font-size: 20px;
+            }
+
+            #servoSter {
+                max-height: 231px;
+            }
+
+            #onOffVideo {
+                margin-left: 50%;
+                text-align: center;
+                width: 50px;
+                height: 40px;
+            }
+
+            #arrowSter {
+                margin-left: 30%;
+            }
+
+            #measures {
+                font-size: 28px;
+                margin-top: 310px;
+            }
+        }
+
+        @media only screen and (max-width: 1270px) {
+            .sterButton {
+                width: 7vw;
+                height: 7vw;
+                margin: 3px;
+            }
+
+            .servoButton {
+                width: 5vw;
+            }
+
+            #servoInfo {
+                height: 2.5vw;
+                line-height: 2.5vw;
+                font-size: 1.5vw;
+            }
+
+            #servoSter {
+                max-height: 17vw;
+            }
+
+            #video {
+                width: 49vw;
+                height: 36.75vw;
+            }
+
+            #arrowSter {
+                margin-left: 27%;
+            }
+
+            #precSter {
+                width: 5.5vw;
+                height: 2.75vw;
+                line-height: 2.75vw;
+                font-size: 1.3vw;
+            }
+
+            #measures {
+                margin-top: 21vw;
+            }
+        }
+
+        @media only screen and (max-width: 1120px) {
+            #video {
+                width: 50vw;
+                height: 37.5vw;
+            }
+
+            .sterButton {
+                width: 8vw;
+                height: 8vw;
+                margin: 3.5px;
+            }
+
+            .servoButton {
+                width: 6vw;
+            }
+
+            #servoInfo {
+                height: 2vw;
+                line-height: 2vw;
+                font-size: 2vw;
+            }
+
+            #servoSter {
+                max-height: 19.5vw;
+            }
+
+            #onOffVideo {
+                width: 45px;
+                height: 35px;
+                font-size: 1.6vw;
+            }
+        }
+
+        @media only screen and (max-width: 875px) {
+            .servoButton {
+                width: 5.5vw;
+            }
+
+            #servoInfo {
+                height: 2vw;
+                line-height: 2vw;
+            }
+
+            #servoSter {
+                max-height: 21vw;
+            }
+
+            #lazikImg {
+                display: none;
+            }
+
+            #measures {
+                margin-top: 25vw;
+            }
+        }
+
+        @media only screen and (max-width: 707px) {
+            li {
+                width: 24vw;
+                height: 10.3vw;
+                line-height: 10.3vw;
+                font-size: 5.2vw;
+            }
+
+            .servoButton {
+                width: 5.2vw;
+            }
+
+            #servoInfo {
+                height: 1.7vw;
+                line-height: 1.7vw;
+            }
+
+            #servoSter {
+                max-height: 22vw;
+            }
+        }
+
+        @media only screen and (max-width: 560px) {
+            #onOffVideo {
+                width: 40px;
+                height: 30px;
+                font-size: 2.2vw;
+            }
+
+            .servoButton {
+                width: 5.2vw;
+            }
+
+            #servoInfo {
+                height: 1vw;
+                line-height: 1vw;
+            }
+
+            #servoSter {
+                max-height: 23.5vw;
+            }
+        }
+
+        @media only screen and (max-width: 420px) {
+            ul {
+                flex-direction: column;
+            }
+
+            li {
+                width: 100%;
+                height: 15vw;
+                line-height: 15vw;
+                font-size: 7vw;
+            }
+
+            #video {
+                width: 60vw;
+                height: 45vw;
+            }
+        }
+    </style>
 </head>
 
 <body>
+    <nav>
+        <img id="lazikImg" src="lazik.png" alt="" />
+        <ul>
+            <li>Sterring</li>
+            <li>Joystick</li>
+            <li>Data</li>
+            <li style="float: right">About</li>
+        </ul>
+    </nav>
+    <main>
+        <button type="button" id="darkLight">&#9790;</button>
+        <section>
+            <div id="content">
+                <img id="video" style="transform: rotate(175deg)" />
+            </div>
+            <button type="button" id="onOffVideo">Off</button>
+            <p id="precSterInfo">Precise Sterring:</p>
+            <button id="precSter" type="button">None</button>
+        </section>
+        <div id="arrowSter">
+            <button type="button" id="forward" class="sterButton">&#8593;</button>
+            <br />
+            <div id="downArrows">
+                <button type="button" id="left" class="sterButton">&#8592;</button>
+                <button type="button" id="back" class="sterButton">&#8595;</button>
+                <button type="button" id="right" class="sterButton">&#8594;</button>
+            </div>
+        </div>
+        <div id="servoSter">
+            <button type="button" id="servoPlus" class="servoButton"> &#8593; </button>
+            <br />
+            <p id="servoInfo">Servo</p>
+            <br />
+            <button type="button" id="servoMinus" class="servoButton"> &#8595; </button>
+        </div>
+        <div id="measures">
+            <div class="column">
+                <p class="measure" id="temp">0&#176;C</p>
+            </div>
+            <div class="column">
+                <p class="measure" id="humi">0%</p>
+            </div>
+        </div>
+    </main>
     <script>
-        const data = { temperature: '18.6', humidity: 36, since_start: "0:32:16" };
-        console.log(JSON.stringify(data));
-        fetch('http://localhost:8080/sendData', {
-            method: 'POST', // or 'PUT'
-            mode: 'no-cors',
-            body: JSON.stringify(data),
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        })
+        let sendDataToggle = true;
+        let style = "dark"; //reversed logic kind of xd
+        let precSter = 0;
+        let precLetter = ""; //to usprawnić sending data
+        let streamOnToggle = false;
+        let userDevice = "";
+
+        function device() {
+            const ua = navigator.userAgent;
+            if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+                userDevice = "tablet";
+            } else if (
+                /Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(
+                    ua
+                )
+            ) {
+                userDevice = "mobile";
+            }
+            userDevice = "desktop";
+        }
+
+        device();
+
+        async function sendData(what) {
+            if (sendDataToggle) {
+                sendDataToggle = false;
+                console.log(what);
+                fetch("http://192.168.1.44/" + what, {
+                    method: "GET",
+                    mode: "cors",
+                    headers: {
+                        "Access-Control-Request-Method": "*",
+                        "Access-Control-Allow-Origin": "*",
+                        Vary: "*",
+                    },
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.temperature > 0 && data.temperature < 50) {
+                            document.querySelector(
+                                "#temp"
+                            ).innerHTML = `${data.temperature}&#176;C`;
+                        }
+                        if (data.humidity > 0 && data.temperature <= 100) {
+                            document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                        }
+                    })
+                    .catch((err) => {
+                        console.log("Failed to send data", err);
+                    });
+            };
+
+            sendDataToggle = true;
+        }
+
+        function changeSiteStyle() {
+            if (style == "dark") {
+                style = "bright";
+
+                $("body").css({ "background-color": "#102130", color: "white" });
+                $("#darkLight").css({
+                    "background-color": "white",
+                    color: "#102130",
+                });
+                $("#darkLight").html("&#9788;");
+                // darkLight.style.color = "#2a2d36";
+                // darkLight.innerHTML = "";
+                document.querySelector("#measures").style.color = "white";
+            } else if (style == "bright") {
+                style = "dark";
+
+                $("body").css({ "background-color": "white", color: "black" });
+                $("#darkLight").css({
+                    "background-color": "#102130",
+                    color: "white",
+                });
+                $("#darkLight").html("&#9790;");
+                document.querySelector("#measures").style.color = "black";
+            }
+        }
+
+        function changePrecSter() {
+            console.log(precSter);
+            if (precSter == 0) {
+                precSter = 1;
+                precLetter = "l";
+                $("#precSter").html("800ms");
+            } else if (precSter == 1) {
+                precSter = 2;
+                precLetter = "";
+                $("#precSter").html("500ms");
+            } else if (precSter == 2) {
+                precSter = 3;
+                precLetter = "s";
+                $("#precSter").html("150ms");
+            } else if (precSter == 3) {
+                precSter = 4;
+                precLetter = "u";
+                $("#precSter").html("85ms");
+            } else if (precSter == 4) {
+                precSter = 0;
+                precLetter = "";
+                $("#precSter").html("None");
+            }
+        }
+
+        function streamStart() {
+            setTimeout(function () { }, 300);
+            $("#video").attr("src", "http://192.168.1.44/video");
+            streamOnToggle = true;
+        }
+
+        function startStopStream() {
+            if (streamOnToggle) {
+                $("#video").attr("src", "");
+                $("#onOffVideo").css("background-color", "red");
+                $("#onOffVideo").html("Off");
+                streamOnToggle = false;
+            } else {
+                $("#video").attr("src", "http://192.168.1.44/video");
+                $("#onOffVideo").css("background-color", "green");
+                $("#onOffVideo").html("On");
+                streamOnToggle = true;
+            }
+        }
+
+        function translateSterrData(data) {
+            if (precSter > 0) {
+                return precLetter + "prec" + String(data);
+            } else {
+                return data;
+            }
+        }
+
+        function desktopBinds() {
+            $("#forward").on("mousedown", () => precSter == 0 ? sendData(1) : null);
+            $("#left").on("mousedown", () => precSter == 0 ? sendData(2) : null);
+            $("#back").on("mousedown", () => precSter == 0 ? sendData(3) : null);
+            $("#right").on("mousedown", () => precSter == 0 ? sendData(4) : null);
+
+            $("#forward").on("mouseup", () => precSter == 0 ? sendData(0) : null);
+            $("#left").on("mouseup", () => precSter == 0 ? sendData(0) : null);
+            $("#back").on("mouseup", () => precSter == 0 ? sendData(0) : null);
+            $("#right").on("mouseup", () => precSter == 0 ? sendData(0) : null);
+        }
+
+        function mobileBinds() {
+            $("#forward").on("touchstart", () => precSter == 0 ? sendData(1) : null);
+            $("#left").on("touchstart", () => precSter == 0 ? sendData(2) : null);
+            $("#back").on("touchstart", () => precSter == 0 ? sendData(3) : null);
+            $("#right").on("touchstart", () => precSter == 0 ? sendData(4) : null);
+        }
+
+        function defaultBinds() {
+            $("#darkLight").on("click", changeSiteStyle);
+            $("#onOffVideo").on("click", startStopStream);
+            $("#precSter").on("click", changePrecSter);
+
+            $("#forward").on("click", () => precSter > 0 ? sendData(translateSterrData(1)) : null);
+            $("#left").on("click", () => precSter > 0 ? sendData(translateSterrData(2)) : null);
+            $("#back").on("click", () => precSter > 0 ? sendData(translateSterrData(3)) : null);
+            $("#right").on("click", () => precSter > 0 ? sendData(translateSterrData(4)) : null);
+
+            $("#servoPlus").on("click", () => sendData("servoplus"));
+            $("#servoMinus").on("click", () => sendData("servominus"));
+        }
+
+        defaultBinds();
+
+        if (userDevice == "desktop") {
+            desktopBinds();
+        } else {
+            mobileBinds();
+        }
+
     </script>
 </body>
 
