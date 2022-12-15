@@ -1,640 +1,774 @@
 #include "Arduino.h"
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@900&display=swap" rel="stylesheet" />
-  <style>
-    body {
-      text-align: center;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      -khtml-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      user-select: none;
-      transform: scale(1);
-    }
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sterring</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <style>
+        /* DEAFULT MARGINS AND NAVBAR */
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: "Rubik", sans-serif;
+            user-select: none;
+        }
 
-    .button {
-      color: black;
-      text-align: center;
-      width: 76.8px;
-      height: 76.8px;
-      margin: 2.88px;
-      user-select: none;
-      border: 2px solid black;
-      border-radius: 8px;
-      background-color: #d1d1d1;
-    }
-
-    #content {
-      margin: 1.5em;
-    }
-
-    .button:hover {
-      background-color: #c0c0c0;
-      cursor: pointer;
-    }
-
-    #precSter {
-      display: inline-block;
-    }
-
-    #sterringButtons {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #sterringButtons>button {
-      margin: 10px;
-      background-color: rgb(67, 73, 88);
-      color: white;
-      height: 32px;
-      width: 172px;
-      border-radius: 0.5em;
-    }
-
-    #sterringButtons>div>button {
-      margin: 10px;
-      background-color: rgb(67, 73, 88);
-      color: white;
-      height: 32px;
-      width: 153px;
-      border-radius: 0.5em;
-    }
-
-    .sterButton {
-      margin: 5px;
-    }
-
-    #pstatus {
-      margin: auto;
-      width: 5em;
-      height: 1em;
-      background-color: #d1d1d1;
-    }
-
-    #sterring {
-      display: inline-flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      gap: 5em;
-    }
-
-    #info {
-      margin-top: 3em;
-    }
-
-    #measures {
-      font-size: 36px;
-      display: flex;
-      position: relative;
-      height: 100%;
-      width: 100%;
-      font-size: 30px;
-      justify-content: center;
-    }
-
-    #temp {
-      float: right
-    }
-
-    #humi {
-      float: left;
-    }
-
-    .column {
-      /* float: left;
-      width: 40/%; */
-      padding: 50px;
-    }
-
-    .row:after {
-      content: "";
-      display: table;
-      clear: both;
-    }
-
-    #images {
-      width: 640px;
-      height: 480px;
-    }
-
-    @media only screen and (max-width: 800px) {}
-  </style>
-</head>
-
-<body>
-  <header>
-    <h1 id="h1" style="font-family: 'Lato', sans-serif">ER Janusz Control</h1>
-  </header>
-  <main>
-    <article id="upper-buttons">
-      <button type="button" id="gosleep">GOSLEEP</button>
-      <button type="button" id="upload" class="sterButton">UPLOAD</button>
-      <br />
-      <button type="button" id="darkLight" style="
+        #darkLight {
             cursor: pointer;
             clear: both;
             text-align: center;
-            width: 30px;
-            height: 30px;
+            width: 42px;
+            height: 42px;
             background-color: #2a2d36;
             color: white;
-          "> &#9790; </button>
-    </article>
-    <div id="content">
-      <img id="images" style="transform: rotate(175deg)" />
-    </div>
-    <br />
-    <article>
-      <div id="sterring">
+        }
+
+        #darkLight:hover {
+            filter: brightness(85%);
+        }
+
+        #lazikImg {
+            position: absolute;
+            height: 90px;
+            width: 132px;
+            margin-top: -10px;
+            text-align: center;
+            margin-left: 1.5%;
+        }
+
+        ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 1px;
+            overflow: hidden;
+            background-color: rgb(201, 1, 1);
+            display: flex;
+            align-self: center;
+            align-items: center;
+            flex-direction: row;
+            justify-content: center;
+        }
+
+        li {
+            text-align: center;
+            font-size: 36px;
+            width: 170px;
+            height: 73px;
+            font-weight: 500;
+            display: inline-block;
+            vertical-align: middle;
+            line-height: 73px;
+            color: white;
+            text-decoration: none;
+            transition: background-color 0.05s, border-radius 0.1s;
+            border: 1px solid red;
+        }
+
+        /* Change the link color to #111 (black) on hover */
+        li:hover {
+            background-color: #111;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+
+        /*END*/
+        #arrowSter {
+            margin-top: 25px;
+            margin-left: 34%;
+            display: flex;
+            flex-wrap: nowrap;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            float: left;
+            position: absolute;
+        }
+
+        #forward {
+            margin-bottom: -15px;
+        }
+
+        #servoPlus {
+            margin-top: 25px;
+        }
+
+        #servoSter {
+            margin-left: 61%;
+            max-height: 272.5px;
+            display: flex;
+            flex-wrap: nowrap;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            float: left;
+            position: absolute;
+        }
+
+        .sterButton {
+            color: black;
+            /* text-align: center; */
+            width: 115px;
+            height: 115px;
+            margin: 4.5px;
+            user-select: none;
+            border: 2px solid black;
+            border-radius: 8px;
+            background-color: #d1d1d1;
+        }
+
+        .sterButton:hover {
+            background-color: #c0c0c0;
+            cursor: pointer;
+        }
+
+        .servoButton {
+            color: black;
+            /* text-align: center; */
+            width: 70px;
+            height: 70px;
+            user-select: none;
+            border: 2px solid black;
+            border-radius: 8px;
+            background-color: #d1d1d1;
+        }
+
+        .servoButton:hover {
+            background-color: #c0c0c0;
+            cursor: pointer;
+        }
+
+        #servoInfo {
+            height: 110px;
+            line-height: 110px;
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        #content {
+            text-align: center;
+            margin: 2.5em;
+            padding: 0.5em;
+        }
+
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: rotate(180deg);
+        }
+
+        #onOffVideo {
+            background-color: red;
+            border: 2px solid black;
+            border-radius: 5px;
+            margin-left: 53%;
+            text-align: center;
+            width: 55px;
+            height: 45px;
+            color: rgb(217, 217, 217);
+            font-size: 0.85vw;
+        }
+
+        #onOffVideo:hover {
+            filter: brightness(85%);
+            cursor: pointer;
+        }
+
+        #precSterInfo {
+            font-size: 1.5vw;
+            text-align: center;
+            line-height: 38px;
+            float: left;
+            margin-left: 5%;
+        }
+
+        #precSter {
+            float: left;
+            width: 80px;
+            margin-left: 1%;
+            height: 40px;
+            font-size: 0.8vw;
+        }
+
+        #precSter:hover {
+            filter: brightness(85%);
+            cursor: pointer;
+        }
+
+        #measures {
+            font-size: 40px;
+            display: flex;
+            position: absolute;
+            height: 15%;
+            width: 100%;
+            justify-content: center;
+            margin-top: 360px;
+        }
+
+        #temp {
+            float: right;
+        }
+
+        #humi {
+            float: left;
+        }
+
+        .column {
+            margin-left: 75px;
+            margin-right: 75px;
+            margin-top: 1%;
+        }
+
+        .row:after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+        @media only screen and (max-width: 1920px) {
+            li {
+                font-size: 30px;
+                width: 155px;
+                height: 60px;
+                font-weight: 500;
+                display: inline-block;
+                vertical-align: middle;
+                line-height: 60px;
+            }
+
+            #lazikImg {
+                position: absolute;
+                height: 78px;
+                width: 118px;
+                margin-top: -11px;
+                text-align: center;
+                margin-left: 1%;
+            }
+
+            #video {
+                width: 600px;
+                height: 450px;
+            }
+
+            .sterButton {
+                width: 95px;
+                height: 95px;
+                margin: 4px;
+            }
+
+            .servoButton {
+                width: 65px;
+                height: 65px;
+                margin: 3.5px;
+            }
+
+            #servoInfo {
+                height: 70px;
+                line-height: 70px;
+                font-size: 20px;
+            }
+
+            #servoSter {
+                max-height: 231px;
+            }
+
+            #onOffVideo {
+                margin-left: 50%;
+                text-align: center;
+                width: 50px;
+                height: 40px;
+            }
+
+            #arrowSter {
+                margin-left: 30%;
+            }
+
+            #measures {
+                font-size: 28px;
+                margin-top: 310px;
+            }
+        }
+
+        @media only screen and (max-width: 1270px) {
+            .sterButton {
+                width: 7vw;
+                height: 7vw;
+                margin: 3px;
+            }
+
+            .servoButton {
+                width: 5vw;
+            }
+
+            #servoInfo {
+                height: 5vw;
+                line-height: 5vw;
+                font-size: 1.5vw;
+            }
+
+            #servoSter {
+                max-height: 18vw;
+            }
+
+            #video {
+                width: 49vw;
+                height: 36.75vw;
+            }
+
+            #arrowSter {
+                margin-left: 27%;
+            }
+
+            #precSter {
+                width: 5.5vw;
+                height: 2.75vw;
+                line-height: 2.75vw;
+                font-size: 1.3vw;
+            }
+
+            #measures {
+                margin-top: 21vw;
+            }
+        }
+
+        @media only screen and (max-width: 1120px) {
+            #video {
+                width: 50vw;
+                height: 37.5vw;
+            }
+
+            .sterButton {
+                width: 8vw;
+                height: 8vw;
+                margin: 3.5px;
+            }
+
+            .servoButton {
+                width: 6vw;
+            }
+
+            #servoInfo {
+                height: 4.5vw;
+                line-height: 4.5vw;
+                font-size: 2vw;
+            }
+
+            #servoSter {
+                max-height: 22vw;
+            }
+
+            #onOffVideo {
+                width: 45px;
+                height: 35px;
+                font-size: 1.6vw;
+            }
+
+            #precSterInfo {
+                font-size: 1.5vw;
+                line-height: 3.5vw;
+                margin-left: 2%;
+                font-size: 2.35vw;
+            }
+
+            #precSter {
+                margin-left: 1%;
+                height: 3.5vw;
+                font-size: 1.35vw;
+            }
+
+            .column {
+                margin-left: 40px;
+                margin-right: 40px;
+                margin-top: 5%;
+            }
+        }
+
+        @media only screen and (max-width: 875px) {
+            .servoButton {
+                width: 5.5vw;
+            }
+
+            #servoInfo {
+                height: 5vw;
+                line-height: 5vw;
+            }
+
+            #servoSter {
+                margin-left: 65.5%;
+                max-height: 21vw;
+                max-width: 100%;
+            }
+
+            #lazikImg {
+                display: none;
+            }
+
+            #measures {
+                font-size: 24px;
+                margin-top: 25vw;
+            }
+        }
+
+        @media only screen and (max-width: 707px) {
+            li {
+                width: 24vw;
+                height: 10.3vw;
+                line-height: 10.3vw;
+                font-size: 5.2vw;
+            }
+
+            .servoButton {
+                width: 5.2vw;
+            }
+
+            #servoInfo {
+                height: 5vw;
+                line-height: 5vw;
+            }
+
+            #servoSter {
+                margin-left: 66.5%;
+                max-height: 22vw;
+            }
+        }
+
+        @media only screen and (max-width: 560px) {
+            #onOffVideo {
+                margin-left: 44%;
+                width: 40px;
+                height: 30px;
+                font-size: 2.2vw;
+            }
+
+            #servoInfo {
+                height: 7.5vw;
+                line-height: 7.5vw;
+                font-size: 3vw;
+            }
+
+            #servoSter {
+                max-height: 30.5vw;
+            }
+
+            #arrowSter {
+                margin-left: 15%;
+            }
+
+            #content {
+                margin-left: 9%;
+            }
+
+            .sterButton {
+                border: 1px solid black;
+                border-radius: 5px;
+                width: 11vw;
+                height: 11vw;
+                margin: 2.5px;
+            }
+
+            .servoButton {
+                border: 1px solid black;
+                border-radius: 5px;
+                background-color: #d1d1d1;
+                width: 7vw;
+            }
+
+            #precSterInfo {
+                line-height: 4vw;
+                margin-left: 1%;
+                font-size: 3.4vw;
+            }
+
+            #precSter {
+                margin-left: 1%;
+                height: 5vw;
+                width: 7.5vw;
+                font-size: 2.4vw;
+            }
+
+            #measures {
+                margin: 0;
+                margin-top: 35vw;
+            }
+
+            .column {
+                margin-left: 30px;
+                margin-right: 30px;
+            }
+        }
+
+        @media only screen and (max-width: 420px) {
+            ul {
+                flex-direction: column;
+            }
+
+            li {
+                width: 100%;
+                height: 15vw;
+                line-height: 15vw;
+                font-size: 7vw;
+            }
+
+            #video {
+                width: 60vw;
+                height: 45vw;
+            }
+
+            #content {
+                margin-left: 11.5%;
+            }
+
+            #servoInfo {
+                height: 8vw;
+                line-height: 8vw;
+                font-size: 3vw;
+            }
+
+            #servoSter {
+                margin-left: 70%;
+                max-height: 33vw;
+            }
+
+            #precSterInfo {
+                line-height: 5.3vw;
+                font-size: 3.5vw;
+            }
+
+            #precSter {
+                margin-left: 1%;
+                height: 6.5vw;
+                width: 9vw;
+                font-size: 2.7vw;
+            }
+
+            #measures {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav>
+        <!-- <img id="lazikImg" src="lazik.png" alt="" /> -->
+        <ul>
+            <li>Sterring</li>
+            <li>Joystick</li>
+            <li>Data</li>
+            <li style="float: right">About</li>
+        </ul>
+    </nav>
+    <main>
+        <button type="button" id="darkLight">&#9790;</button>
+        <section>
+            <div id="content">
+                <img id="video" )" />
+            </div>
+            <button type="button" id="onOffVideo">Off</button>
+            <p id="precSterInfo">Precise Sterring:</p>
+            <button id="precSter" type="button">None</button>
+        </section>
         <div id="arrowSter">
-          <button type="button" id="forward" class="button">&#8593;</button>
-          <br />
-          <div id="downArrows">
-            <button type="button" id="left" class="button">&#8592;</button>
-            <button type="button" id="back" class="button">&#8595;</button>
-            <button type="button" id="right" class="button">&#8594;</button>
-          </div>
+            <button type="button" id="forward" class="sterButton">&#8593;</button>
+            <br />
+            <div id="downArrows">
+                <button type="button" id="left" class="sterButton">&#8592;</button>
+                <button type="button" id="back" class="sterButton">&#8595;</button>
+                <button type="button" id="right" class="sterButton">&#8594;</button>
+            </div>
         </div>
-        <div id="sterringButtons">
-          <button type="button" id="precSter">PREC-STER</button>
-          <p id="pstatus">none</p>
-          <div>
-            <button type="button" id="stop" class="sterButton">STOP</button>
-            <button type="button" id="start" class="sterButton">START</button>
-          </div>
-          <div>
-            <button type="button" id="servoplus" class="sterButton"> SERVOPLUS </button>
-            <button type="button" id="servominus" class="sterButton"> SERVOMINUS </button>
-          </div>
-          <button type="button" id="joystickState">JOYSTICK OFF</button>
-          <button type="button" id="sendData">Send Data</button>
+        <div id="servoSter">
+            <button type="button" id="servoPlus" class="servoButton"> &#8593; </button>
+            <!-- <br> -->
+            <p id="servoInfo">Servo</p>
+            <!-- <br> -->
+            <button type="button" id="servoMinus" class="servoButton"> &#8595; </button>
         </div>
-      </div>
-      <br>
-      <div id="measures">
-        <div class="column">
-          <p class="measure" id="temp">0&#176;C</p>
+        <div id="measures">
+            <div class="column">
+                <p class="measure" id="temp">0&#176;C</p>
+            </div>
+            <div class="column">
+                <p class="measure" id="humi">0%</p>
+            </div>
         </div>
-        <div class="column">
-          <p class="measure" id="humi">0%</p>
-        </div>
-      </div>
-    </article>
-  </main>
-  <article>
-    <div id="info">Info</div>
-  </article>
-  <script>
-    let sendDataToggle = true;
-    let style = "dark";
-    let darkLight = document.getElementById("darkLight");
-    let h1 = document.getElementById("h1");
-    let joystickStateBool = false;
-    let precSter = 0;
+    </main>
+    <p id="info">null</p>
+    <script>
+        let sendDataToggle = true;
+        let style = "dark"; //reversed logic kind of xd
+        let precSter = 0;
+        let precLetter = ""; //to usprawnić sending data
+        let streamOnToggle = false;
+        let userDevice = "";
 
-    function dewajs() {
-      const ua = navigator.userAgent;
-      if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
-        return "tablet";
-      } else if (
-        /Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(
-          ua
-        )
-      ) {
-        return "mobile";
-      }
-      return "desktop";
-    }
+        window.mobileAndTabletCheck = function () {
+            let check = false;
+            (function (a) { if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true; })(navigator.userAgent || navigator.vendor || window.opera);
+            return check;
+        };
 
-    const deviceType = dewajs();
-    window.onload = function () {
-      console.log(deviceType);
-      function Nic() {
-        document.getElementById("content").innerHTML = " ";
-      }
-
-      function streamOn() {
-        setTimeout(function () { }, 350);
-        document.getElementById("content").innerHTML =
-          '<img id="images" style="transform: rotate(180deg); margin-left: 3px;" src="http://192.168.1.44/video">';
-      }
-
-      function change() {
-        if (style == "dark") {
-          style = "bright";
-          document.body.style.backgroundColor = "#2a2d36";
-          darkLight.style.backgroundColor = "white";
-          darkLight.style.color = "#2a2d36";
-          darkLight.innerHTML = "&#9788";
-          h1.style.color = "white";
-          document.querySelector('#measures').style.color = "white";
-        } else if (style == "bright") {
-          style = "dark";
-          document.body.style.backgroundColor = "white";
-          darkLight.style.backgroundColor = "#2a2d36";
-          darkLight.style.color = "white";
-          darkLight.innerHTML = "&#9790";
-          h1.style.color = "black";
-          document.querySelector('#measures').style.color = "black";
+        async function sendData(what) {
+            console.log(what);
+            $("#info").html(what);
+            fetch("http://192.168.1.44/" + what, {
+                method: "GET",
+                mode: "cors",
+                headers: {
+                    "Access-Control-Request-Method": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    Vary: "*",
+                },
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.temperature > 0 && data.temperature < 50) {
+                        document.querySelector(
+                            "#temp"
+                        ).innerHTML = `${data.temperature}&#176;C`;
+                    }
+                    if (data.humidity > 0 && data.temperature <= 100) {
+                        document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                    }
+                })
+                .catch((err) => {
+                    console.log("Failed to send data", err);
+                });
         }
-      }
 
-      function sendData(what) {
-        if (sendDataToggle) {
-          sendDataToggle = false;
-          document.getElementById("info").innerHTML = what;
-          console.log(what);
-          fetch("http://192.168.1.44/" + what, {
-            method: "GET",
-            mode: "cors",
-            headers: {
-              "Access-Control-Request-Method": "*",
-              "Access-Control-Allow-Origin": "*",
-              "Vary": "*",
-            },
-          })
-            .then((response) => response.json())
-            .then((data) => {
-              if (data.temperature > 0 && data.temperature < 50) {
-                document.querySelector("#temp").innerHTML = `${data.temperature}&#176;C`;
-              }
-              if (data.humidity > 0 && data.temperature <= 100) {
-                document.querySelector("#humi").innerHTML = `${data.humidity}%`;
-              }
-            });
+        function changeSiteStyle() {
+            if (style == "dark") {
+                style = "bright";
 
-          // var xhttp = new XMLHttpRequest();
-          // xhttp.open("GET", , true);
-          // xhttp.send();
-          setTimeout(function () { }, 50);
-          sendDataToggle = true;
+                $("body").css({ "background-color": "#102130", color: "white" });
+                $("#darkLight").css({
+                    "background-color": "white",
+                    color: "#102130",
+                });
+                $("#darkLight").html("&#9788;");
+                // darkLight.style.color = "#2a2d36";
+                // darkLight.innerHTML = "";
+                document.querySelector("#measures").style.color = "white";
+            } else if (style == "bright") {
+                style = "dark";
+
+                $("body").css({ "background-color": "white", color: "black" });
+                $("#darkLight").css({
+                    "background-color": "#102130",
+                    color: "white",
+                });
+                $("#darkLight").html("&#9790;");
+                document.querySelector("#measures").style.color = "black";
+            }
         }
-        if (what == "upload") {
-          Nic();
-          location.reload();
+
+        function changePrecSter() {
+            console.log(precSter);
+            if (precSter == 0) {
+                precSter = 1;
+                precLetter = "l";
+                $("#precSter").html("800ms");
+            } else if (precSter == 1) {
+                precSter = 2;
+                precLetter = "";
+                $("#precSter").html("500ms");
+            } else if (precSter == 2) {
+                precSter = 3;
+                precLetter = "s";
+                $("#precSter").html("150ms");
+            } else if (precSter == 3) {
+                precSter = 4;
+                precLetter = "u";
+                $("#precSter").html("85ms");
+            } else if (precSter == 4) {
+                precSter = 0;
+                precLetter = "";
+                $("#precSter").html("None");
+            }
         }
-      }
 
-      function changePrecSter() {
-        console.log(precSter);
-        if (precSter == 0) {
-          precSter = 1;
-          document.getElementById("pstatus").innerHTML = "800ms";
-          setTimeout(function () { }, 150);
-        } else if (precSter == 1) {
-          precSter = 2;
-          document.getElementById("pstatus").innerHTML = "500ms";
-          setTimeout(function () { }, 150);
-        } else if (precSter == 2) {
-          precSter = 3;
-          document.getElementById("pstatus").innerHTML = "150ms";
-          setTimeout(function () { }, 150);
-        } else if (precSter == 3) {
-          precSter = 4;
-          document.getElementById("pstatus").innerHTML = "85ms";
-          setTimeout(function () { }, 150);
-        } else if (precSter == 4) {
-          precSter = 0;
-          document.getElementById("pstatus").innerHTML = "none";
-          setTimeout(function () { }, 150);
+        function streamStart() {
+            setTimeout(function () { }, 300);
+            $("#video").attr("src", "http://192.168.1.44/video");
+            streamOnToggle = true;
         }
-      }
 
-      function checkLoaded() {
-        setTimeout(function () { }, 50);
-        return (
-          document.readyState === "complete" ||
-          document.readyState === "interactive"
-        );
-      }
-      while (checkLoaded() != 1) {
-        console.log("not loaded");
-        setTimeout(function () { }, 100);
-      }
-      if (checkLoaded()) {
-        console.log("loaded");
-        document.getElementById("images").style.marginLeft = "1px";
-        setTimeout(function () { }, 50);
-        if (deviceType == "desktop") {
-          document
-            .getElementById("stop")
-            .addEventListener("mousedown", function () {
-              sendData("stop");
-              Nic();
-            });
-          document
-            .getElementById("start")
-            .addEventListener("mousedown", function () {
-              sendData("start");
-              streamOn();
-            });
-
-          // document.getElementById("video").addEventListener("mousedown", function() {sendData("video"); streamOn()});
-
-          document
-            .getElementById("upload")
-            .addEventListener("mousedown", function () {
-              sendData("upload");
-            });
-
-          document
-            .getElementById("gosleep")
-            .addEventListener("mousedown", function () {
-              sendData("gosleep");
-            });
-
-          document
-            .getElementById("darkLight")
-            .addEventListener("mousedown", function () {
-              change();
-            });
-
-          document
-            .getElementById("precSter")
-            .addEventListener("mousedown", function () {
-              changePrecSter();
-              setTimeout(function () { }, 150);
-            });
-
-          document
-            .getElementById("servoplus")
-            .addEventListener("mousedown", function () {
-              sendData("servoplus");
-            });
-          document
-            .getElementById("servominus")
-            .addEventListener("mousedown", function () {
-              sendData("servominus");
-            });
-
-          document
-            .getElementById("joystickState")
-            .addEventListener("mousedown", function () {
-              if (joystickStateBool == false) {
-                sendData("joystickFalse");
-                joystickStateBool = true;
-                document.getElementById("joystickState").innerHTML =
-                  "JOYSTICK ON";
-              } else {
-                sendData("joystickTrue");
-                joystickStateBool = false;
-                document.getElementById("joystickState").innerHTML =
-                  "JOYSTICK OFF";
-              }
-            });
-
-          document
-            .getElementById("forward")
-            .addEventListener("mousedown", function () {
-              if (precSter);
-              else {
-                sendData(1);
-              }
-            });
-          document
-            .getElementById("forward")
-            .addEventListener("mouseup", function () {
-              if (precSter == 1) sendData("lprec1");
-              else if (precSter == 2) sendData("prec1");
-              else if (precSter == 3) sendData("sprec1");
-              else if (precSter == 4) sendData("uprec1");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("left")
-            .addEventListener("mousedown", function () {
-              if (precSter);
-              else {
-                sendData(2);
-              }
-            });
-          document
-            .getElementById("left")
-            .addEventListener("mouseup", function () {
-              if (precSter == 1) sendData("lprec2");
-              else if (precSter == 2) sendData("prec2");
-              else if (precSter == 3) sendData("sprec2");
-              else if (precSter == 4) sendData("uprec2");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("back")
-            .addEventListener("mousedown", function () {
-              if (precSter);
-              else {
-                sendData(3);
-              }
-            });
-          document
-            .getElementById("back")
-            .addEventListener("mouseup", function () {
-              if (precSter == 1) sendData("lprec3");
-              else if (precSter == 2) sendData("prec3");
-              else if (precSter == 3) sendData("sprec3");
-              else if (precSter == 4) sendData("uprec3");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("right")
-            .addEventListener("mousedown", function () {
-              if (precSter);
-              else {
-                sendData(4);
-              }
-            });
-          document
-            .getElementById("right")
-            .addEventListener("mouseup", function () {
-              if (precSter == 1) sendData("lprec4");
-              else if (precSter == 2) sendData("prec4");
-              else if (precSter == 3) sendData("sprec4");
-              else if (precSter == 4) sendData("uprec4");
-              else {
-                sendData(0);
-              }
-            });
-          document
-            .getElementById("sendData")
-            .addEventListener("mouseup", function () {
-              sendData("sendData");
-            });
-        } else {
-          document
-            .getElementById("stop")
-            .addEventListener("touchstart", function () {
-              sendData("stop");
-              Nic();
-            });
-          document
-            .getElementById("start")
-            .addEventListener("touchstart", function () {
-              sendData("start");
-              streamOn();
-            });
-
-          // document.getElementById("video").addEventListener("touchstart", function() {sendData("video"); streamOn()});
-
-          document
-            .getElementById("upload")
-            .addEventListener("touchstart", function () {
-              sendData("upload");
-            });
-
-          document
-            .getElementById("gosleep")
-            .addEventListener("touchstart", function () {
-              sendData("gosleep");
-            });
-
-          document
-            .getElementById("darkLight")
-            .addEventListener("touchstart", function () {
-              change();
-            });
-
-          document
-            .getElementById("precSter")
-            .addEventListener("touchstart", function () {
-              changePrecSter();
-              setTimeout(function () { }, 150);
-            });
-
-          document
-            .getElementById("servoplus")
-            .addEventListener("touchstart", function () {
-              sendData("servoplus");
-            });
-          document
-            .getElementById("servominus")
-            .addEventListener("touchstart", function () {
-              sendData("servominus");
-            });
-
-          document
-            .getElementById("joystickState")
-            .addEventListener("touchstart", function () {
-              if (joystickStateBool == false) {
-                sendData("joystickFalse");
-                joystickStateBool = true;
-              } else {
-                sendData("joystickTrue");
-                joystickStateBool = false;
-              }
-            });
-
-          document
-            .getElementById("forward")
-            .addEventListener("touchstart", function () {
-              if (precSter);
-              else {
-                sendData(1);
-              }
-            });
-
-          document
-            .getElementById("forward")
-            .addEventListener("touchend", function () {
-              if (precSter == 1) sendData("lprec1");
-              else if (precSter == 2) sendData("prec1");
-              else if (precSter == 3) sendData("sprec1");
-              else if (precSter == 4) sendData("uprec1");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("left")
-            .addEventListener("touchstart", function () {
-              if (precSter);
-              else {
-                sendData(2);
-              }
-            });
-          document
-            .getElementById("left")
-            .addEventListener("touchend", function () {
-              if (precSter == 1) sendData("lprec2");
-              else if (precSter == 2) sendData("prec2");
-              else if (precSter == 3) sendData("sprec2");
-              else if (precSter == 4) sendData("uprec2");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("back")
-            .addEventListener("touchstart", function () {
-              if (precSter);
-              else {
-                sendData(3);
-              }
-            });
-          document
-            .getElementById("back")
-            .addEventListener("touchend", function () {
-              if (precSter == 1) sendData("lprec3");
-              else if (precSter == 2) sendData("prec3");
-              else if (precSter == 3) sendData("sprec3");
-              else if (precSter == 4) sendData("uprec3");
-              else {
-                sendData(0);
-              }
-            });
-
-          document
-            .getElementById("right")
-            .addEventListener("touchstart", function () {
-              if (precSter);
-              else {
-                sendData(4);
-              }
-            });
-          document
-            .getElementById("right")
-            .addEventListener("touchend", function () {
-              if (precSter == 1) sendData("lprec4");
-              else if (precSter == 2) sendData("prec4");
-              else if (precSter == 3) sendData("sprec4");
-              else if (precSter == 4) sendData("uprec4");
-              else {
-                sendData(0);
-              }
-            });
-          document
-            .getElementById("sendData")
-            .addEventListener("touchstart", function () {
-              sendData("sendData");
-            });
+        function startStopStream() {
+            if (streamOnToggle) {
+                $("#video").attr("src", "");
+                $("#onOffVideo").css("background-color", "red");
+                $("#onOffVideo").html("Off");
+                streamOnToggle = false;
+            } else {
+                $("#video").attr("src", "http://192.168.1.44/video");
+                $("#onOffVideo").css("background-color", "green");
+                $("#onOffVideo").html("On");
+                streamOnToggle = true;
+            }
         }
-      }
-      streamOn();
-      sendData(0);
-      setInterval(function () { sendData("data"); }, 1000);
-    };
 
-    // setTimeout(function () { }, 100);
-  </script>
+        function translateSterrData(data) {
+            if (precSter > 0) {
+                return precLetter + "prec" + String(data);
+            } else {
+                return data;
+            }
+        }
+
+        function desktopBinds() {
+            $("#forward").on("mousedown", () => precSter == 0 ? sendData(1) : console.log("null"));
+            $("#left").on("mousedown", () => precSter == 0 ? sendData(2) : console.log("null"));
+            $("#back").on("mousedown", () => precSter == 0 ? sendData(3) : console.log("null"));
+            $("#right").on("mousedown", () => precSter == 0 ? sendData(4) : console.log("null"));
+
+            $("#forward").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#left").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#back").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#right").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
+        }
+
+        function mobileBinds() {
+            $("#forward").on("touchstart", () => precSter == 0 ? sendData(1) : console.log("null"));
+            $("#left").on("touchstart", () => precSter == 0 ? sendData(2) : console.log("null"));
+            $("#back").on("touchstart", () => precSter == 0 ? sendData(3) : console.log("null"));
+            $("#right").on("touchstart", () => precSter == 0 ? sendData(4) : console.log("null"));
+
+            $("#forward").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#left").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#back").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#right").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+        }
+
+        function defaultBinds() {
+            $("#darkLight").on("click", changeSiteStyle);
+            $("#onOffVideo").on("click", startStopStream);
+            $("#precSter").on("click", changePrecSter);
+
+            $("#forward").on("click", () => precSter > 0 ? sendData(translateSterrData(1)) : console.log("null"));
+            $("#left").on("click", () => precSter > 0 ? sendData(translateSterrData(2)) : console.log("null"));
+            $("#back").on("click", () => precSter > 0 ? sendData(translateSterrData(3)) : console.log("null"));
+            $("#right").on("click", () => precSter > 0 ? sendData(translateSterrData(4)) : console.log("null"));
+
+            $("#servoPlus").on("click", () => sendData("servoplus"));
+            $("#servoMinus").on("click", () => sendData("servominus"));
+        }
+
+        window.onload = () => {
+            console.log(window.mobileAndTabletCheck());
+            if (window.mobileAndTabletCheck()) {
+                mobileBinds();
+            } else {
+                desktopBinds();
+            }
+            defaultBinds();
+            setInterval(() => sendData("data"), 1000);
+        }
+
+    </script>
 </body>
 
 </html> )=====";
