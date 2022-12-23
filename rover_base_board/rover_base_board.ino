@@ -32,15 +32,13 @@ int xPos, yPos, tPos;
 
 // static const int spiClk = 10000000; // Clock for SPI
 
-unsigned long prevMillisJOY = 0;
 unsigned long prevMillisUSS = 0;
 unsigned long prevMillisSEND = 0;
 unsigned long prevMillisSTOP = 0;
 
 unsigned long timeToStop = -1;
 
-unsigned int joystickInterval = 250;
-unsigned int ultrasonicInterval = 50;
+unsigned int ultrasonicInterval = 75;
 
 int currTemp = 0;
 int currHumi = 0;
@@ -85,6 +83,9 @@ void forward()
   {
     digitalWrite(ENA, HIGH);
     digitalWrite(ENB, HIGH);
+
+    // analogWrite(ENA, 50);
+    // analogWrite(ENB, 50);
 
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
@@ -144,7 +145,7 @@ void stoper()
   if (waiter == true)
   {
     waiter = false;
-    delay(330);
+    delay(150);
   }
 }
 
@@ -260,6 +261,43 @@ void joystickSterring(int x, int y, int mode)
   }
 }
 
+// Function that handles joystick from web (wrote via js) which has diffrent working methods
+
+void WEBjoystickSterring(int x, int y)
+{
+  // Serial.println(x);
+  // Serial.println(y);
+  if (x > 0 && colideToggle)
+  {
+    return;
+  }
+
+  if (y < 0)
+  {
+
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+  }
+  else
+  {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+  }
+
+  x = abs(x);
+  y = abs(y);
+
+  x = constrain(x, 0, 255);
+  y = constrain(y, 0, 255);
+
+  analogWrite(ENA, x);
+  analogWrite(ENB, y);
+}
+
 void fill_buffer(String data)
 {
   for (int i = 0; i <= data.length(); i++)
@@ -302,12 +340,32 @@ void requestsHandler(String message)
       xValue = xValue + message[i];
     }
 
-    for (int i = yPos + 1; i < tPos; i++)
+    if (tPos > 0)
     {
-      yValue = yValue + message[i];
+
+      for (int i = yPos + 1; i < tPos; i++)
+      {
+        yValue = yValue + message[i];
+      }
+    }
+    else
+    {
+      for (int i = yPos + 1; i < message.length(); i++)
+      {
+        yValue = yValue + message[i];
+      }
     }
 
-    joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
+    // Serial.println(tValue.toInt());
+
+    if (tValue.toInt() > 0)
+    {
+      joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
+    }
+    else
+    {
+      WEBjoystickSterring(xValue.toInt(), yValue.toInt());
+    }
   }
   else if (message == "sendData")
   {
@@ -557,7 +615,7 @@ void setup()
 
   delay(50);
 
-  Serial.begin(57600);
+  Serial.begin(230400);
   Serial.println("START");
 }
 
@@ -606,17 +664,15 @@ void loop()
   if (millis() - prevMillisUSS >= ultrasonicInterval)
   {
 
-    if (getDistance() < 30)
+    if (getDistance() < 29)
     {
       digitalWrite(LED_BUILTIN, HIGH);
-      delayMicroseconds(5);
       if ((colideToggle == false) && doesForward == true)
       {
         stoper();
-        delayMicroseconds(5);
       }
       colideToggle = true;
-      delay(750);
+      delay(500);
     }
     else
     {
@@ -638,24 +694,23 @@ ISR(SPI_STC_vect)
 
   c = SPDR;
 
-  if (index <= 32)
+  // Serial.println(c);
+  if (c < 128 && c > 31)
   {
-    if ((int)c < 128 && (int)c > 31)
+    dataRec += (char)c;
+    // Serial.println(dataRec);
+  }
+  if (c == 4)
+  {
+    // Serial.print("Dane otrzymane u slavea: ");
+    // Serial.println(dataRec);
+    // Serial.println();
+    if (dataRec.length() > 0)
     {
-      dataRec += (char)c;
+      requestsHandler(dataRec);
     }
-    if (c == 4)
-    {
-      Serial.print("Dane otrzymane u slavea: ");
-      Serial.println(dataRec);
-      Serial.println();
-      if (dataRec.length() > 0)
-      {
-        requestsHandler(dataRec);
-      }
-      index = 0;
-      dataRec = "";
-    }
+    index = 0;
+    dataRec = "";
   }
   SREG = oldsrg;
   // SPI.endTransaction();

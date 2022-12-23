@@ -18,6 +18,8 @@ int nowMode;
 bool toggle = false;
 
 int count0;
+int xValue;
+int yValue;
 
 //-----------SEND DATA--------------------------------
 
@@ -167,8 +169,6 @@ int sterringValues(int x, int y)
 
 // LOOP
 
-int xValue;
-int yValue;
 void loop()
 {
     // FREERAM_PRINT;

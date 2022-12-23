@@ -12,6 +12,7 @@
 #include "soc/rtc_cntl_reg.h"
 
 #include "index.h"
+#include "joystick.h"
 
 #include "wifi_config.h"
 
@@ -55,12 +56,13 @@ int currHumidity = 0;
 
 const int serverPort = server_port; // Server port
 
-static const int spiClk = 3000000; // Clock for SPI
+static const int spiClk = 4000000; // Clock for SPI
 
 unsigned long lastTime = 0;
 unsigned long timerDelay = 50;
 
 unsigned long prevMillisSPI = 0;
+unsigned long prevMillisLIVECAM = 0;
 unsigned int SPIinterval = 50;
 
 bool canVideo = false;
@@ -75,6 +77,8 @@ bool recivedDone = false;
 
 bool joystickState = false;
 
+String joystickType = "";
+
 String serverIP = server_ip;     // Server IP that handles data,photos etc.
 String serverPath = server_path; // Path on server
 
@@ -88,7 +92,8 @@ String since_start;
 String joystickPath = "http://" + String(joystick_server_ip) + "/getJoyState";
 String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
 
-String index_html = MAIN_page; // Load client site (HTML,CSS,JS)
+String index_html = INDEX_page;       // Load index site (HTML,CSS,JS)
+String joystick_html = JOYSTICK_page; // Load joystick site (HTML,CSS,JS)
 
 char sendBuff[32];
 
@@ -175,10 +180,11 @@ void send_data(String stringMess)
 
   digitalWrite(HSPI_SS, LOW);
 
-  delay(1);
+  delayMicroseconds(5);
 
   for (int i = 0; i <= stringMess.length() + 1; i++)
   {
+    delayMicroseconds(50);
     // Prints for developing purposes
     Serial.print(sendBuff[i]);
     Serial.print(" ");
@@ -186,6 +192,7 @@ void send_data(String stringMess)
     Serial.print(" ");
     hspi->transfer((uint8_t)sendBuff[i]);
   }
+  delayMicroseconds(25);
   hspi->transfer((uint8_t)4);
 
   digitalWrite(HSPI_SS, HIGH);
@@ -306,7 +313,7 @@ void http_resp()
     {
       req += (char)client.read();
     }
-    Serial.println("request " + req);
+    // Serial.println("request " + req);
 
     /* First line of HTTP request is "GET / HTTP/1.1"
       here "GET /" is a request to get the first page at root "/"
@@ -340,7 +347,7 @@ void http_resp()
     Serial.println("Request: " + req);
     s = "";
 
-    if (req.indexOf("joy") != -1)
+    if (req.indexOf("joy") != -1 && req != "/joystickPage")
     {
       String joyBool = "";
       int joyStart = req.indexOf("k");
@@ -355,11 +362,44 @@ void http_resp()
       if (joyBool == "True")
       {
         joystickState = true;
+        joystickType = "phys";
         Serial.println("TruJes");
+      }
+      else if (joyBool == "TrueWEB")
+      {
+        joystickState = true;
+        joystickType = "web";
+        Serial.println("TruJesWeb");
       }
       else
       {
         joystickState = false;
+        joystickType = "";
+      }
+    }
+    else if (req.indexOf("Page") != -1)
+    {
+      if (req == "/startPage")
+      {
+        s = "HTTP/1.1 200 OK\n";
+        s += "Content-Type: text/html\n\n";
+        s += index_html;
+        s += "\n";
+
+        client.print(s);
+
+        delay(5);
+      }
+      else if (req == "/joystickPage")
+      {
+        s = "HTTP/1.1 200 OK\n";
+        s += "Content-Type: text/html\n\n";
+        s += joystick_html;
+        s += "\n";
+
+        client.print(s);
+
+        delay(5);
       }
     }
     else if (req == "/data")
@@ -385,7 +425,7 @@ void http_resp()
 
       client.print(s);
 
-      delay(10);
+      delay(5);
 
       if (canLoad == true)
       {
@@ -460,13 +500,13 @@ void http_resp()
       {
         send_data(req);
 
-        s = "HTTP/1.1 200 OK\n";
-        s += "Access-Control-Allow-Headers: *\n";
-        s += "Access-Control-Allow-Origin: *\n";
-        s += "Content-Type: text/plain\n\n";
-        s += "thanks";
-        s += "\n";
-        client.print(s);
+        // s = "HTTP/1.1 200 OK\n";
+        // s += "Access-Control-Allow-Headers: *\n";
+        // s += "Access-Control-Allow-Origin: *\n";
+        // s += "Content-Type: text/plain\n\n";
+        // s += "thanks";
+        // s += "\n";
+        // client.print(s);
       }
     }
   }
@@ -499,7 +539,7 @@ void setup()
 
   hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   digitalWrite(HSPI_SS, LOW);
-  delay(150);
+  delay(450);
   send_data("/0");
   // File root = SPIFFS.open("/");
 
@@ -549,11 +589,16 @@ void setup()
     wifiTries = NULL;
   }
 
-
   // Serial.println("");
   String IP = WiFi.localIP().toString();
 
-  index_html.replace("server_ip", IP);
+  index_html.replace("change_this_ip", IP);
+  index_html.replace("index.html", "startPage");
+  index_html.replace("joystick.html", "joystickPage");
+
+  joystick_html.replace("change_this_ip", IP);
+  joystick_html.replace("index.html", "startPage");
+  joystick_html.replace("joystick.html", "joystickPage");
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
   //   printLocalTime();
@@ -576,7 +621,11 @@ void loop()
 
   if (((millis() - lastTime) > timerDelay) && joystickState)
   {
-    http_request(1);
+    if (joystickType != "web")
+    {
+      http_request(1);
+    }
+
     lastTime = millis();
   }
 
@@ -631,7 +680,11 @@ void loop()
   // Serial.println(connected);
   if (connected == true)
   {
-    liveCam(live_client);
+    if (millis() - prevMillisLIVECAM >= 20)
+    {
+      liveCam(live_client);
+      prevMillisLIVECAM = millis();
+    }
   }
 }
 

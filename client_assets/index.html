@@ -16,6 +16,18 @@
             user-select: none;
         }
 
+        a {
+            text-decoration: none;
+        }
+
+        a:link {
+            color: white;
+        }
+
+        a:visited {
+            color: white;
+        }
+
         #darkLight {
             cursor: pointer;
             clear: both;
@@ -554,8 +566,8 @@
     <nav>
         <!-- <img id="lazikImg" src="lazik.png" alt="" /> -->
         <ul>
-            <li>Sterring</li>
-            <li>Joystick</li>
+            <li><a href="index.html">Sterring</a></li>
+            <li><a href="joystick.html">Joystick</a></li>
             <li>Data</li>
             <li style="float: right">About</li>
         </ul>
@@ -564,7 +576,7 @@
         <button type="button" id="darkLight">&#9790;</button>
         <section>
             <div id="content">
-                <img id="video" )" />
+                <img id="video" />
             </div>
             <button type="button" id="onOffVideo">Off</button>
             <p id="precSterInfo">Precise Sterring:</p>
@@ -603,6 +615,7 @@
         let precLetter = ""; //to usprawnić sending data
         let streamOnToggle = false;
         let userDevice = "";
+        let server_ip = "192.168.11.43";
 
         window.mobileAndTabletCheck = function () {
             let check = false;
@@ -613,7 +626,7 @@
         async function sendData(what) {
             console.log(what);
             $("#info").html(what);
-            fetch("http://192.168.1.44/" + what, {
+            fetch(`http://${server_ip}/` + what, {
                 method: "GET",
                 mode: "cors",
                 headers: {
@@ -689,12 +702,6 @@
             }
         }
 
-        function streamStart() {
-            setTimeout(function () { }, 300);
-            $("#video").attr("src", "http://192.168.1.44/video");
-            streamOnToggle = true;
-        }
-
         function startStopStream() {
             if (streamOnToggle) {
                 $("#video").attr("src", "");
@@ -702,7 +709,7 @@
                 $("#onOffVideo").html("Off");
                 streamOnToggle = false;
             } else {
-                $("#video").attr("src", "http://192.168.1.44/video");
+                $("#video").attr("src", `http://${server_ip}/video`);
                 $("#onOffVideo").css("background-color", "green");
                 $("#onOffVideo").html("On");
                 streamOnToggle = true;
@@ -754,6 +761,7 @@
             $("#servoPlus").on("click", () => sendData("servoplus"));
             $("#servoMinus").on("click", () => sendData("servominus"));
         }
+        sendData("joystickFalse");
 
         window.onload = () => {
             console.log(window.mobileAndTabletCheck());

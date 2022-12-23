@@ -1,13 +1,13 @@
 #include "Arduino.h"
-const char INDEX_page[] PROGMEM = R"=====(
+const char JOYSTICK_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sterring</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no,maximum-scale=1">
+    <title>Joystick</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
     <style>
         /* DEAFULT MARGINS AND NAVBAR */
@@ -53,6 +53,37 @@ const char INDEX_page[] PROGMEM = R"=====(
             margin-left: 1.5%;
         }
 
+        #content {
+            text-align: center;
+            margin: 2.5em;
+            padding: 0.5em;
+        }
+
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: rotate(180deg);
+        }
+
+        #onOffVideo {
+            background-color: red;
+            border: 2px solid black;
+            border-radius: 5px;
+            margin-left: 0;
+            margin-top: 2%;
+            text-align: center;
+            width: 55px;
+            height: 45px;
+            color: rgb(217, 217, 217);
+            font-size: 0.85vw;
+            position: absolute;
+        }
+
+        #onOffVideo:hover {
+            filter: brightness(85%);
+            cursor: pointer;
+        }
+
         ul {
             list-style-type: none;
             margin: 0;
@@ -88,21 +119,49 @@ const char INDEX_page[] PROGMEM = R"=====(
             border-radius: 8px;
         }
 
-        /*END*/
-        #arrowSter {
-            margin-top: 25px;
-            margin-left: 34%;
-            display: flex;
-            flex-wrap: nowrap;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            float: left;
+        #joystick {
             position: absolute;
+            background-color: lightgrey;
+            width: 300px;
+            height: 300px;
+            margin-left: 60%;
+            margin-top: 100px;
         }
 
-        #forward {
-            margin-bottom: -15px;
+        #joyButton {
+            text-align: center;
+            width: 35px;
+            height: 35px;
+            border-radius: 100%;
+            position: absolute;
+            margin-top: 42.625%;
+            margin-left: 45.55%;
+        }
+
+        #joyButton:hover {
+            background-color: rgb(195, 195, 195);
+            cursor: pointer;
+        }
+
+        .index:first-of-type {
+            margin-left: 44%;
+        }
+
+        .index {
+            margin-right: 0.5%;
+            float: left;
+        }
+
+        .littleMarginRight {
+            margin-right: 15px;
+        }
+
+        .floatLeft {
+            float: left;
+        }
+
+        .clear {
+            clear: both;
         }
 
         #servoPlus {
@@ -110,7 +169,8 @@ const char INDEX_page[] PROGMEM = R"=====(
         }
 
         #servoSter {
-            margin-left: 61%;
+            margin-top: 0;
+            margin-left: 49%;
             max-height: 272.5px;
             display: flex;
             flex-wrap: nowrap;
@@ -119,23 +179,6 @@ const char INDEX_page[] PROGMEM = R"=====(
             align-items: center;
             float: left;
             position: absolute;
-        }
-
-        .sterButton {
-            color: black;
-            /* text-align: center; */
-            width: 115px;
-            height: 115px;
-            margin: 4.5px;
-            user-select: none;
-            border: 2px solid black;
-            border-radius: 8px;
-            background-color: #d1d1d1;
-        }
-
-        .sterButton:hover {
-            background-color: #c0c0c0;
-            cursor: pointer;
         }
 
         .servoButton {
@@ -161,56 +204,6 @@ const char INDEX_page[] PROGMEM = R"=====(
             font-size: 24px;
         }
 
-        #content {
-            text-align: center;
-            margin: 2.5em;
-            padding: 0.5em;
-        }
-
-        #video {
-            width: 640px;
-            height: 480px;
-            transform: rotate(180deg);
-        }
-
-        #onOffVideo {
-            background-color: red;
-            border: 2px solid black;
-            border-radius: 5px;
-            margin-left: 53%;
-            text-align: center;
-            width: 55px;
-            height: 45px;
-            color: rgb(217, 217, 217);
-            font-size: 0.85vw;
-        }
-
-        #onOffVideo:hover {
-            filter: brightness(85%);
-            cursor: pointer;
-        }
-
-        #precSterInfo {
-            font-size: 1.5vw;
-            text-align: center;
-            line-height: 38px;
-            float: left;
-            margin-left: 5%;
-        }
-
-        #precSter {
-            float: left;
-            width: 80px;
-            margin-left: 1%;
-            height: 40px;
-            font-size: 0.8vw;
-        }
-
-        #precSter:hover {
-            filter: brightness(85%);
-            cursor: pointer;
-        }
-
         #measures {
             font-size: 40px;
             display: flex;
@@ -233,12 +226,6 @@ const char INDEX_page[] PROGMEM = R"=====(
             margin-left: 75px;
             margin-right: 75px;
             margin-top: 1%;
-        }
-
-        .row:after {
-            content: "";
-            display: table;
-            clear: both;
         }
 
         @media only screen and (max-width: 1920px) {
@@ -286,10 +273,11 @@ const char INDEX_page[] PROGMEM = R"=====(
 
             #servoSter {
                 max-height: 231px;
+                margin-left: -1.4vw;
             }
 
             #onOffVideo {
-                margin-left: 50%;
+                margin-left: 0;
                 text-align: center;
                 width: 50px;
                 height: 40px;
@@ -302,6 +290,28 @@ const char INDEX_page[] PROGMEM = R"=====(
             #measures {
                 font-size: 28px;
                 margin-top: 310px;
+            }
+
+            #joystick {
+                margin-top: 6vw;
+            }
+
+            #servoMeas {
+                position: absolute;
+                margin-top: 10%;
+                margin-left: 48.2%;
+            }
+        }
+
+        @media only screen and (max-width: 1700px) {
+            #servoMeas {
+                margin-top: 34%;
+            }
+        }
+
+        @media only screen and (max-width: 1500px) {
+            #servoMeas {
+                margin-top: 40%;
             }
         }
 
@@ -345,9 +355,23 @@ const char INDEX_page[] PROGMEM = R"=====(
             #measures {
                 margin-top: 21vw;
             }
+
+            #servoMeas {
+                margin-top: 44%;
+            }
         }
 
         @media only screen and (max-width: 1120px) {
+            #joystick {
+                width: 30vw;
+                height: 30vw;
+            }
+
+            #joyButton {
+                width: 3.1vw;
+                height: 3.1vw;
+            }
+
             #video {
                 width: 50vw;
                 height: 37.5vw;
@@ -410,7 +434,7 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
 
             #servoSter {
-                margin-left: 65.5%;
+                margin-left: 47%;
                 max-height: 21vw;
                 max-width: 100%;
             }
@@ -422,6 +446,19 @@ const char INDEX_page[] PROGMEM = R"=====(
             #measures {
                 font-size: 24px;
                 margin-top: 25vw;
+            }
+
+            #joystick {
+                margin-top: 12vw;
+                width: 26vw;
+                height: 26vw;
+                margin-left: 67%;
+            }
+
+            #joyButton {
+                margin-left: 45.45%;
+                width: 3.8vw;
+                height: 3.8vw;
             }
         }
 
@@ -443,14 +480,13 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
 
             #servoSter {
-                margin-left: 66.5%;
+                margin-left: 48%;
                 max-height: 22vw;
             }
         }
 
         @media only screen and (max-width: 560px) {
             #onOffVideo {
-                margin-left: 44%;
                 width: 40px;
                 height: 30px;
                 font-size: 2.2vw;
@@ -531,7 +567,14 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
 
             #content {
-                margin-left: 11.5%;
+                margin-left: 19%;
+            }
+
+            #onOffVideo {
+                width: 36px;
+                height: 27px;
+                font-size: 2.1vw;
+                margin-left: -10%;
             }
 
             #servoInfo {
@@ -541,24 +584,55 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
 
             #servoSter {
-                margin-left: 70%;
+                margin-left: 50%;
                 max-height: 33vw;
-            }
-
-            #precSterInfo {
-                line-height: 5.3vw;
-                font-size: 3.5vw;
-            }
-
-            #precSter {
-                margin-left: 1%;
-                height: 6.5vw;
-                width: 9vw;
-                font-size: 2.7vw;
             }
 
             #measures {
                 font-size: 22px;
+            }
+
+            #joystick {
+                margin-top: 65%;
+                width: 35vw;
+                height: 35vw;
+                margin-left: 35%;
+            }
+
+            #joyButton {
+                margin-left: 45.45%;
+                width: 5vw;
+                height: 5vw;
+            }
+
+            #ratios {
+                position: absolute;
+                margin-top: 115%;
+                margin-bottom: 0;
+                margin-left: 20%;
+            }
+
+            #Wheels {
+                font-size: 3.2vw;
+                position: absolute;
+                margin-top: 105%;
+                margin-bottom: 0;
+                margin-left: 38%;
+            }
+
+            .index:first-of-type {
+                margin-left: 0;
+            }
+
+            .index {
+                margin: 0;
+                padding: 0;
+            }
+
+            #servoMeas {
+                position: absolute;
+                margin-top: 110%;
+                margin-left: 52.5%;
             }
         }
     </style>
@@ -574,49 +648,72 @@ const char INDEX_page[] PROGMEM = R"=====(
             <li style="float: right">About</li>
         </ul>
     </nav>
+    <button type="button" id="darkLight">&#9790;</button>
     <main>
-        <button type="button" id="darkLight">&#9790;</button>
-        <section>
-            <div id="content">
-                <img id="video" />
-            </div>
-            <button type="button" id="onOffVideo">Off</button>
-            <p id="precSterInfo">Precise Sterring:</p>
-            <button id="precSter" type="button">None</button>
-        </section>
-        <div id="arrowSter">
-            <button type="button" id="forward" class="sterButton">&#8593;</button>
-            <br />
-            <div id="downArrows">
-                <button type="button" id="left" class="sterButton">&#8592;</button>
-                <button type="button" id="back" class="sterButton">&#8595;</button>
-                <button type="button" id="right" class="sterButton">&#8594;</button>
-            </div>
+        <div class="floatLeft" id="content">
+            <img id="video" />
         </div>
-        <div id="servoSter">
-            <button type="button" id="servoPlus" class="servoButton"> &#8593; </button>
-            <!-- <br> -->
-            <p id="servoInfo">Servo</p>
-            <!-- <br> -->
-            <button type="button" id="servoMinus" class="servoButton"> &#8595; </button>
+        <div class="clear" id="joystick"><button type="button" id="joyButton"></button>
         </div>
-        <div id="measures">
-            <div class="column">
-                <p class="measure" id="temp">0&#176;C</p>
+        <button type="button" id="onOffVideo">Off</button>
+        <!-- <div class="clear" id="ratios">
+            <p class="index" id="firstindex">RatioX:</p>
+            <p class="floatLeft littleMarginRight" id="ratioX">null</p>
+            <p class="floatLeft index">RatioY:</p>
+            <p class=" floatLeft" id="ratioY">null</p>
+        </div> -->
+        <div id="Wheels">
+            <p class="index clear">Left:</p>
+            <p class="floatLeft littleMarginRight" id="left">null</p>
+            <p class="floatLeft index">Right:</p>
+            <p class=" floatLeft" id="right">null</p>
+        </div>
+        <div id="servoMeas" class="clear">
+            <div id="servoSter">
+                <button type="button" id="servoPlus" class="servoButton"> &#8593; </button>
+                <!-- <br> -->
+                <p id="servoInfo">Servo</p>
+                <!-- <br> -->
+                <button type="button" id="servoMinus" class="servoButton"> &#8595; </button>
             </div>
-            <div class="column">
-                <p class="measure" id="humi">0%</p>
+            <div id="measures">
+                <div class="column">
+                    <p class="measure" id="temp">0&#176;C</p>
+                </div>
+                <div class="column">
+                    <p class="measure" id="humi">0%</p>
+                </div>
             </div>
         </div>
     </main>
-    <p id="info">null</p>
     <script>
-        let sendDataToggle = true;
-        let style = "dark"; //reversed logic kind of xd
-        let precSter = 0;
-        let precLetter = ""; //to usprawnić sending data
         let streamOnToggle = false;
-        let userDevice = "";
+
+        let style = "dark"; //reversed logic kind of xd
+
+        let joyButton = document.querySelector("#joyButton");
+        let joyArea = document.querySelector("#joystick");
+
+        let joyAP = joyArea.getBoundingClientRect(); //Area Params
+        let joyButtonAP = joyButton.getBoundingClientRect();
+
+        let toCenterPos = joyButtonAP.width / 2
+
+        console.log(joyAP);
+        console.log(joyButtonAP);
+
+        let mouseX = $("#mouseX");
+        let mouseY = $("#mouseY");
+
+        let buttX = $("#buttX");
+        let buttY = $("#buttY");
+
+        let convX = $("#convX");
+        let convY = $("#convY");
+
+        let currentL = 0;
+        let currentR = 0;
+
         let server_ip = "change_this_ip";
 
         window.mobileAndTabletCheck = function () {
@@ -653,117 +750,185 @@ const char INDEX_page[] PROGMEM = R"=====(
                 });
         }
 
-        function changeSiteStyle() {
-            if (style == "dark") {
-                style = "bright";
+        function updateDisplay(event) {
+            let mousX;
+            let mousY;
 
-                $("body").css({ "background-color": "#102130", color: "white" });
-                $("#darkLight").css({
-                    "background-color": "white",
-                    color: "#102130",
-                });
-                $("#darkLight").html("&#9788;");
-                // darkLight.style.color = "#2a2d36";
-                // darkLight.innerHTML = "";
-                document.querySelector("#measures").style.color = "white";
-            } else if (style == "bright") {
-                style = "dark";
-
-                $("body").css({ "background-color": "white", color: "black" });
-                $("#darkLight").css({
-                    "background-color": "#102130",
-                    color: "white",
-                });
-                $("#darkLight").html("&#9790;");
-                document.querySelector("#measures").style.color = "black";
+            if (event.pageX) {
+                mousX = event.pageX;
+                mousY = event.pageY;
+            } else if (event.touches[0].clientX) {
+                mousX = event.touches[0].clientX;
+                mousY = event.touches[0].clientY;
             }
+
+            console.log(event);
+
+            $("#mouseX").html(mousX);
+            $("#mouseY").html(mousY);
+
+            $("#joyButton").css({ "margin": 0, "position": "absolute" });
+
+            let currJoyButParams = joyButton.getBoundingClientRect();
+
+            if (mousX < joyAP.left + toCenterPos) {
+                $("#joyButton").css("left", `0px`);
+                console.log("left");
+            } else if (mousX > joyAP.right - toCenterPos) {
+                $("#joyButton").css("right", `${joyAP.width - joyButtonAP.width}px`);
+                console.log("right");
+            } else {
+                $("#joyButton").css("left", `${mousX - toCenterPos - joyAP.x}px`);
+                console.log("else");
+            }
+
+            if (mousY < joyAP.top + toCenterPos) {
+                $("#joyButton").css("top", `0px`);
+            } else if (mousY > joyAP.bottom - toCenterPos) {
+                $("#joyButton").css("top", `${joyAP.height - joyButtonAP.height}px`);
+            } else {
+                $("#joyButton").css("top", `${mousY - toCenterPos - joyAP.y}px`);
+            }
+
+            currJoyButParams = joyButton.getBoundingClientRect();
+
+            console.log(currJoyButParams.x, currJoyButParams.y)
+
+            let relX = (currJoyButParams.x + toCenterPos - joyAP.x) - ((joyAP.width) / 2);
+            let relY = (currJoyButParams.y + toCenterPos - joyAP.y) - ((joyAP.height) / 2);
+
+            $("#convX").html(relX);
+            $("#convY").html(relY);
+
+            let ratioX = relX / ((joyAP.width - (toCenterPos * 2)) / 2);
+            let ratioY = relY / ((joyAP.height - (toCenterPos * 2)) / 2);
+
+            let Xtoggle = true;
+            let Ytoggle = true;
+
+            $("#ratioX").html(ratioX);
+            $("#ratioY").html(ratioY);
+
+            if (ratioX < 0) {
+                Xtoggle = false;
+            }
+
+            if (ratioY < 0) {
+                Ytoggle = false
+            }
+
+            ratioX = Math.abs(ratioX);
+            ratioY = Math.abs(ratioY);
+
+            let left = Math.floor((256 - (128 * (1 - Math.abs(ratioY))) - (128 * ratioX)) * ratioY);
+            let right = Math.floor((ratioX > ratioY) ? 256 * ratioX : 256 * ratioY);
+
+            let c;
+
+            if (Xtoggle) {
+                c = left;
+                left = right;
+                right = c;
+            }
+
+            if (Ytoggle) {
+                left *= -1;
+                right *= -1;
+            }
+
+            $("#left").html(left);
+            $("#right").html(right);
+
+            currentL = left;
+            currentR = right;
         }
 
-        function changePrecSter() {
-            console.log(precSter);
-            if (precSter == 0) {
-                precSter = 1;
-                precLetter = "l";
-                $("#precSter").html("800ms");
-            } else if (precSter == 1) {
-                precSter = 2;
-                precLetter = "";
-                $("#precSter").html("500ms");
-            } else if (precSter == 2) {
-                precSter = 3;
-                precLetter = "s";
-                $("#precSter").html("150ms");
-            } else if (precSter == 3) {
-                precSter = 4;
-                precLetter = "u";
-                $("#precSter").html("85ms");
-            } else if (precSter == 4) {
-                precSter = 0;
-                precLetter = "";
-                $("#precSter").html("None");
-            }
-        }
+        sendData("joystickTrueWEB");
 
         function startStopStream() {
             if (streamOnToggle) {
                 $("#video").attr("src", "");
                 $("#onOffVideo").css("background-color", "red");
                 $("#onOffVideo").html("Off");
+
                 streamOnToggle = false;
             } else {
                 $("#video").attr("src", `http://${server_ip}/video`);
                 $("#onOffVideo").css("background-color", "green");
                 $("#onOffVideo").html("On");
+
                 streamOnToggle = true;
             }
         }
 
-        function translateSterrData(data) {
-            if (precSter > 0) {
-                return precLetter + "prec" + String(data);
-            } else {
-                return data;
+        function changeSiteStyle() {
+            if (style == "dark") {
+                style = "bright";
+
+                $("body").css({ "background-color": "#102130", color: "white" });
+
+                $("#darkLight").css({
+                    "background-color": "white",
+                    color: "#102130",
+                });
+
+                $("#darkLight").html("&#9788;");
+                document.querySelector("#measures").style.color = "white";
+            } else if (style == "bright") {
+                style = "dark";
+
+                $("body").css({ "background-color": "white", color: "black" });
+
+                $("#darkLight").css({
+                    "background-color": "#102130",
+                    color: "white",
+                });
+
+                $("#darkLight").html("&#9790;");
+                document.querySelector("#measures").style.color = "black";
             }
         }
 
         function desktopBinds() {
-            $("#forward").on("mousedown", () => precSter == 0 ? sendData(1) : console.log("null"));
-            $("#left").on("mousedown", () => precSter == 0 ? sendData(2) : console.log("null"));
-            $("#back").on("mousedown", () => precSter == 0 ? sendData(3) : console.log("null"));
-            $("#right").on("mousedown", () => precSter == 0 ? sendData(4) : console.log("null"));
+            $("#joyButton").on("mousedown", () => $("body").on("mousemove", updateDisplay));
+            $("body").on("mouseup", () => {
+                $("body").off("mousemove");
 
-            $("#forward").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#left").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#back").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#right").on("mouseup", () => precSter == 0 ? sendData(0) : console.log("null"));
+                currentL = 0;
+                currentR = 0;
+
+                console.log((joyAP.height / 2) - (joyButtonAP.height / 2), (joyAP.width / 2) - (joyButtonAP.width / 2))
+
+                $("#joyButton").css({ "top": (joyAP.height / 2) - (joyButtonAP.height / 2), "left": (joyAP.width / 2) - (joyButtonAP.width / 2) });
+
+                $("#left").html(currentL);
+                $("#right").html(currentR);
+            });
         }
 
         function mobileBinds() {
-            $("#forward").on("touchstart", () => precSter == 0 ? sendData(1) : console.log("null"));
-            $("#left").on("touchstart", () => precSter == 0 ? sendData(2) : console.log("null"));
-            $("#back").on("touchstart", () => precSter == 0 ? sendData(3) : console.log("null"));
-            $("#right").on("touchstart", () => precSter == 0 ? sendData(4) : console.log("null"));
+            $("#joyButton").on("touchstart", () => {
+                $("body").css("overflow-y", "hidden");
+                $("body").on("touchmove", updateDisplay);
+            });
+            $("body").on("touchend", () => {
+                $("body").css("overflow-y", "auto");
+                $("body").off("touchmove");
 
-            $("#forward").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#left").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#back").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
-            $("#right").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+                currentL = 0;
+                currentR = 0;
+
+                $("#joyButton").css({ "top": (joyAP.height / 2) - (joyButtonAP.height / 2), "left": (joyAP.width / 2) - (joyButtonAP.width / 2) });
+
+                $("#left").html(currentL);
+                $("#right").html(currentR);
+            });
         }
 
         function defaultBinds() {
-            $("#darkLight").on("click", changeSiteStyle);
             $("#onOffVideo").on("click", startStopStream);
-            $("#precSter").on("click", changePrecSter);
-
-            $("#forward").on("click", () => precSter > 0 ? sendData(translateSterrData(1)) : console.log("null"));
-            $("#left").on("click", () => precSter > 0 ? sendData(translateSterrData(2)) : console.log("null"));
-            $("#back").on("click", () => precSter > 0 ? sendData(translateSterrData(3)) : console.log("null"));
-            $("#right").on("click", () => precSter > 0 ? sendData(translateSterrData(4)) : console.log("null"));
-
-            $("#servoPlus").on("click", () => sendData("servoplus"));
-            $("#servoMinus").on("click", () => sendData("servominus"));
+            $("#darkLight").on("click", changeSiteStyle);
         }
-        sendData("joystickFalse");
 
         window.onload = () => {
             console.log(window.mobileAndTabletCheck());
@@ -773,8 +938,9 @@ const char INDEX_page[] PROGMEM = R"=====(
                 desktopBinds();
             }
             defaultBinds();
-            setInterval(() => sendData("data"), 1000);
+            setInterval(() => sendData(`x${currentL}y${currentR}`), 100);
         }
+        setInterval(() => sendData(`data`), 1000);
 
     </script>
 </body>
