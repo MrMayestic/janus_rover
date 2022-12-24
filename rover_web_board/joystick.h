@@ -656,12 +656,12 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
         <div class="clear" id="joystick"><button type="button" id="joyButton"></button>
         </div>
         <button type="button" id="onOffVideo">Off</button>
-        <!-- <div class="clear" id="ratios">
+        <div class="clear" id="ratios">
             <p class="index" id="firstindex">RatioX:</p>
             <p class="floatLeft littleMarginRight" id="ratioX">null</p>
             <p class="floatLeft index">RatioY:</p>
             <p class=" floatLeft" id="ratioY">null</p>
-        </div> -->
+        </div>
         <div id="Wheels">
             <p class="index clear">Left:</p>
             <p class="floatLeft littleMarginRight" id="left">null</p>
@@ -723,7 +723,7 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
         };
 
         async function sendData(what) {
-            console.log(what);
+            // console.log(what);
             $("#info").html(what);
             fetch(`http://${server_ip}/` + what, {
                 method: "GET",
@@ -755,21 +755,30 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
             let mousY;
 
             if (event.pageX) {
-                mousX = event.pageX;
-                mousY = event.pageY;
+                mousX = event.clientX;
+                mousY = event.clientY;
             } else if (event.touches[0].clientX) {
                 mousX = event.touches[0].clientX;
                 mousY = event.touches[0].clientY;
             }
 
-            console.log(event);
+            console.log("evenmt", event);
 
             $("#mouseX").html(mousX);
             $("#mouseY").html(mousY);
 
+            console.log("mouse", mousX, mousY);
+
             $("#joyButton").css({ "margin": 0, "position": "absolute" });
 
-            let currJoyButParams = joyButton.getBoundingClientRect();
+            joyAP = joyArea.getBoundingClientRect(); //Area Params
+            joyButtonAP = joyButton.getBoundingClientRect();
+
+            toCenterPos = joyButtonAP.width / 2
+
+            // let currJoyButParams = joyButton.getBoundingClientRect();
+
+            console.log("params", joyAP);
 
             if (mousX < joyAP.left + toCenterPos) {
                 $("#joyButton").css("left", `0px`);
@@ -790,12 +799,10 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
                 $("#joyButton").css("top", `${mousY - toCenterPos - joyAP.y}px`);
             }
 
-            currJoyButParams = joyButton.getBoundingClientRect();
+            console.log("button", joyButtonAP.x, joyButtonAP.y)
 
-            console.log(currJoyButParams.x, currJoyButParams.y)
-
-            let relX = (currJoyButParams.x + toCenterPos - joyAP.x) - ((joyAP.width) / 2);
-            let relY = (currJoyButParams.y + toCenterPos - joyAP.y) - ((joyAP.height) / 2);
+            let relX = (joyButtonAP.x + toCenterPos - joyAP.x) - ((joyAP.width) / 2);
+            let relY = (joyButtonAP.y + toCenterPos - joyAP.y) - ((joyAP.height) / 2);
 
             $("#convX").html(relX);
             $("#convY").html(relY);
@@ -890,9 +897,9 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
         }
 
         function desktopBinds() {
-            $("#joyButton").on("mousedown", () => $("body").on("mousemove", updateDisplay));
-            $("body").on("mouseup", () => {
-                $("body").off("mousemove");
+            $("#joyButton").on("mousedown", () => $(window).on("mousemove", updateDisplay));
+            $(window).on("mouseup", () => {
+                $(window).off("mousemove");
 
                 currentL = 0;
                 currentR = 0;
@@ -908,12 +915,13 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
 
         function mobileBinds() {
             $("#joyButton").on("touchstart", () => {
+                joyAP = joyArea.getBoundingClientRect();
                 $("body").css("overflow-y", "hidden");
-                $("body").on("touchmove", updateDisplay);
+                $(window).on("touchmove", updateDisplay);
             });
-            $("body").on("touchend", () => {
+            $(document).on("touchend", () => {
                 $("body").css("overflow-y", "auto");
-                $("body").off("touchmove");
+                $(window).off("touchmove");
 
                 currentL = 0;
                 currentR = 0;
@@ -928,6 +936,9 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
         function defaultBinds() {
             $("#onOffVideo").on("click", startStopStream);
             $("#darkLight").on("click", changeSiteStyle);
+
+            $("#servoPlus").on("click", () => sendData("servoplus"));
+            $("#servoMinus").on("click", () => sendData("servominus"));
         }
 
         window.onload = () => {

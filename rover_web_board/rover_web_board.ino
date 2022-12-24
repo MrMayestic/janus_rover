@@ -680,7 +680,7 @@ void loop()
   // Serial.println(connected);
   if (connected == true)
   {
-    if (millis() - prevMillisLIVECAM >= 20)
+    if (millis() - prevMillisLIVECAM >= 21)
     {
       liveCam(live_client);
       prevMillisLIVECAM = millis();
