@@ -1,20 +1,55 @@
-const express = require("express");
-const app = express();
-const bodyParser = require("body-parser");
-const mysql = require("mysql");
+import cors from "cors";
+import express from "express";
 
-require("dotenv").config();
+const app = express();
+
+import bodyParser from "body-parser";
+import mysql from "mysql";
+import * as routes from "./routes/app.routes.js";
+import dotenv from "dotenv"
+
+dotenv.config();
 
 console.log(process.env.HOST);
 
-var con = mysql.createConnection({
+app.use(cors());
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+app.use(bodyParser.raw({type: 'application/octet-stream', limit: "10mb"}))
+
+app.use(bodyParser.json());
+app.use(bodyParser.text());
+
+
+app.use("/",routes.setRoutes());
+
+app.listen(3000, () => {
+  console.log("Listening on port 3000");
+});
+
+var db = mysql.createConnection({
   host: process.env.HOST,
   user: process.env.USER,
   password: process.env.PASSWORD,
   database: process.env.DATABASE,
+
+  queryFormat: function (query, values) {
+    if (!values) return query;
+    return query.replace(
+    /\:(\w+)/g,
+     function (txt, key) {
+      if (values.hasOwnProperty(key)) {
+      return this.escape(values[key]);
+    }
+    return txt;
+     }.bind(this)
+    );
+  }
 });
 
-con.connect(function (err) {
+db.connect(function (err) {
   if (err) {
     console.log("Error \n", err);
   } else {
@@ -22,45 +57,4 @@ con.connect(function (err) {
   }
 });
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(bodyParser.json());
-app.use(bodyParser.text());
-app.use(
-  bodyParser.urlencoded({
-    extended: true,
-  })
-);
-
-app.post("/sendData", (req, res) => {
-  console.log(req.body);
-
-  let parseData = JSON.parse(req.body);
-
-  var sql = "INSERT INTO jr_data (temperature, humidity, since_start) VALUES ?";
-  var values = [
-    [parseData["temperature"], parseData["humidity"], parseData["since_start"]],
-  ];
-
-  for (let i of values) {
-    console.log(i);
-  }
-
-  con.query(sql, [values], function (err, result) {
-    if (err) throw err;
-    console.log("Number of records inserted: " + result.affectedRows);
-  });
-});
-
-app.use("/getData", (req, res) => {
-  console.log("getData");
-  con.query("SELECT * FROM jr_data", function (err, result, fields) {
-    if (err) console.log("Error when making SELECT", err);
-    console.log(result);
-    res.send(result);
-  });
-});
-
-app.listen(8080, () => {
-  console.log("Listening on port 8080");
-});
+export default db
