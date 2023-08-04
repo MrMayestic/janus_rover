@@ -52,9 +52,18 @@ export async function chartData(req, res) {
 
 export async function saveImage(req, res) {
   console.log("saveImage");
-  // console.log(req)
   var photo = req.body;
-  db.query("INSERT INTO `photos` (photo) VALUES(BINARY(:photo))", {photo},(err, results) => {
+  const buff = db.escape(req.body); // Node.js Buffer
+  console.log();
+  db.query("INSERT INTO `photos` (photo) VALUES (Binary("+buff+"))",(err, results) => {
+    if (err) throw err;
+    res.send(results);
+  });
+}
+
+
+export async function deleteData(req, res) {
+  db.query("INSERT INTO `photos` (photo) VALUES (Binary("+buff+"))",(err, results) => {
     if (err) throw err;
     res.send(results);
   });

@@ -7,6 +7,8 @@
 
 #include "esp_camera.h"
 #include "esp_wifi.h"
+#include "esp_bt.h"
+#include "esp32-hal-cpu.h"
 
 #include "soc/soc.h" // disable brownout problems
 #include "soc/rtc_cntl_reg.h"
@@ -47,6 +49,14 @@
 
 /*Start defining variables*/
 
+String moveTimes[342];
+
+char timeAll[24];
+
+int moveCounter = 0;
+
+String moveString = "";
+
 const char *ntpServer = "vega.cbk.poznan.pl"; // Set time server
 const long gmtOffset_sec = 0;
 const int daylightOffset_sec = 7200;
@@ -76,6 +86,8 @@ bool connected = true;
 bool recivedDone = false;
 
 bool joystickState = false;
+
+bool lowEnergyMode = false;
 
 String joystickType = "";
 
@@ -186,10 +198,10 @@ void send_data(String stringMess)
   {
     delayMicroseconds(50);
     // Prints for developing purposes
-    Serial.print(sendBuff[i]);
-    Serial.print(" ");
-    Serial.print((uint8_t)sendBuff[i]);
-    Serial.print(" ");
+    // Serial.print(sendBuff[i]);
+    // Serial.print(" ");
+    // Serial.print((uint8_t)sendBuff[i]);
+    // Serial.print(" ");
     hspi->transfer((uint8_t)sendBuff[i]);
   }
   delayMicroseconds(25);
@@ -197,19 +209,16 @@ void send_data(String stringMess)
 
   digitalWrite(HSPI_SS, HIGH);
 
-  // Serial.println("sended it");
+  Serial.println("sended it");
 }
 
 /*Function that reads data from Slave (called from loop();)*/
 
 void read_data()
 {
-  // Serial.println("read_data");
-  // digitalWrite(HSPI_SS, HIGH);
   digitalWrite(HSPI_SS, LOW);
   for (int i = 0; i <= 3; i++)
   {
-    // delayMicroseconds(5);
     c = hspi->transfer(NULL);
 
     if (c < 128 && c > 31)
@@ -222,14 +231,9 @@ void read_data()
       // Serial.print("Dane otrzymane: ");
       // Serial.println(recData);
       recivedDone = true;
-      // digitalWrite(HSPI_SS, HIGH);
-      // hspi->endTransaction();
-      // return true;
     }
-    // return false;
   }
   digitalWrite(HSPI_SS, HIGH);
-  // digitalWrite(HSPI_SS, LOW);
 }
 
 /* HTTP request functions (for sending requests via HTTP) */
@@ -238,6 +242,24 @@ void read_data()
 1 - joystick
 10 - send POST req with measured data
 */
+
+void lowEnergy()
+{
+  digitalWrite(33, HIGH);
+  lowEnergyMode = true;
+  send_data("lowEn");
+  WiFi.setSleep(true);
+  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_MAX_MODEM);
+}
+
+void normalEnergy()
+{
+  digitalWrite(33, LOW);
+  lowEnergyMode = false;
+  send_data("norEn");
+  WiFi.setSleep(false);
+  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
+}
 
 void http_request(int whichReq)
 {
@@ -249,7 +271,6 @@ void http_request(int whichReq)
     // Your Domain name with URL path or IP address with path
     if (whichReq == 1)
     {
-      Serial.println("aha");
       http.begin(joystickPath.c_str());
 
       // Send HTTP GET request
@@ -269,7 +290,6 @@ void http_request(int whichReq)
     }
     else if (whichReq == 10)
     {
-
       http.begin(sendDataPath.c_str());
 
       http.addHeader("Content-Type", "text/plain");
@@ -342,9 +362,12 @@ void http_resp()
     req = req.substring(addr_start, addr_end);
     req.trim();
 
-    digitalWrite(33, HIGH);
+    if (!lowEnergyMode)
+    {
+      digitalWrite(33, HIGH);
+    }
 
-    Serial.println("Request: " + req);
+    // Serial.println("Request: " + req);
     s = "";
 
     if (req.indexOf("joy") != -1 && req != "/joystickPage")
@@ -357,19 +380,19 @@ void http_resp()
         joyBool = joyBool + req[i];
       }
 
-      Serial.println(joyBool);
+      // Serial.println(joyBool);
 
       if (joyBool == "True")
       {
         joystickState = true;
         joystickType = "phys";
-        Serial.println("TruJes");
+        // Serial.println("TruJes");
       }
       else if (joyBool == "TrueWEB")
       {
         joystickState = true;
         joystickType = "web";
-        Serial.println("TruJesWeb");
+        // Serial.println("TruJesWeb");
       }
       else
       {
@@ -451,20 +474,20 @@ void http_resp()
     {
       delay(10);
 
+      live_client = client;
+
+      live_client.print("HTTP/1.1 200 OK\n");
+      live_client.print("Access-Control-Allow-Headers: *\n");
+      live_client.print("Access-Control-Allow-Origin: *\n");
+      live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
+      live_client.flush();
+
+      canUpload = true;
+      connected = true;
+
       if (canVideo == true)
       {
         // Manually (request from site after manual click by user) load of video
-
-        live_client = client;
-
-        live_client.print("HTTP/1.1 200 OK\n");
-        live_client.print("Access-Control-Allow-Headers: *\n");
-        live_client.print("Access-Control-Allow-Origin: *\n");
-        live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-        live_client.flush();
-
-        canUpload = true;
-        connected = true;
       }
       else
       {
@@ -494,23 +517,77 @@ void http_resp()
       send_data("sendData");
       uploadNeeded = true;
     }
+    else if (req == "/sendPhoto")
+    {
+      sendPhoto();
+    }
+    else if (req == "/lowEnergy")
+    {
+      lowEnergy();
+    }
+    else if (req == "/normalEnergy")
+    {
+      normalEnergy();
+    }
+    else if (req == "/moveResults")
+    {
+      // moveString = "{";
+
+      // for (int i = 1; i <= 10; i++)
+      // {
+      //   String data = "";
+      //   for (int j = (i - 1) * 33; j <= i * 33; j++)
+      //   {
+      //     data += moveTimes[j];
+      //   }
+
+      //   moveString += "\"" + String(i) + "\":\"" + data + "\"";
+      //   if (i < 10)
+      //   {
+      //     moveString += ",";
+      //   }
+
+      //   data = "";
+      // }
+
+      // moveString += "}";
+
+      moveString = "{\"data\":\"";
+
+      for (int i = 0; i < 340; i++)
+      {
+        moveString += moveTimes[i];
+      }
+
+      moveString += "\"}";
+      // Serial.println(moveString);
+
+
+      s = "HTTP/1.1 200 OK\n";
+      s += "Access-Control-Allow-Headers: *\n";
+      s += "Access-Control-Allow-Origin: *\n";
+      s += "Content-Type: application/json\n\n";
+      s += moveString;
+      s += "\n";
+
+      client.print(s);
+
+      delay(200);
+
+      moveString = "";
+    }
     else
     {
       if (req != "/favicon.ico")
       {
         send_data(req);
-
-        // s = "HTTP/1.1 200 OK\n";
-        // s += "Access-Control-Allow-Headers: *\n";
-        // s += "Access-Control-Allow-Origin: *\n";
-        // s += "Content-Type: text/plain\n\n";
-        // s += "thanks";
-        // s += "\n";
-        // client.print(s);
       }
     }
   }
-  digitalWrite(33, LOW);
+  if (!lowEnergyMode)
+  {
+    digitalWrite(33, LOW);
+  }
 }
 
 /*Setup function*/
@@ -519,6 +596,8 @@ void setup()
 {
 
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+
+  setCpuFrequencyMhz(120);
 
   Serial.begin(115200);
 
@@ -539,20 +618,16 @@ void setup()
 
   hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   digitalWrite(HSPI_SS, LOW);
+
+  wifi_config_t wifi_config = {
+      .sta = {
+          .listen_interval = 7,
+      },
+  };
+
   delay(450);
+
   send_data("/0");
-  // File root = SPIFFS.open("/");
-
-  // File file = root.openNextFile();
-
-  // while (file)
-  // {
-
-  //   // Serial.print("FILE: ");
-  //   // Serial.println(file.name());
-
-  //   file = root.openNextFile();
-  // }
 
   WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
 
@@ -589,7 +664,6 @@ void setup()
     wifiTries = NULL;
   }
 
-  // Serial.println("");
   String IP = WiFi.localIP().toString();
 
   index_html.replace("change_this_ip", IP);
@@ -601,22 +675,24 @@ void setup()
   joystick_html.replace("joystick.html", "joystickPage");
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
-  //   printLocalTime();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
-  // server.enableCORS();
+
+  // Power saving
+  esp_bt_controller_disable();
+
   delay(10);
   configCamera();
   delay(20);
   server.begin();
 
-  // attachInterrupt(HSPI_MISO,read_data,HIGH);
+  lowEnergy();
 }
 
 /*Loop function*/
 
 void loop()
 {
-
+  delay(1);
   client = server.available();
 
   if (((millis() - lastTime) > timerDelay) && joystickState)
@@ -633,45 +709,73 @@ void loop()
   {
 
     read_data();
-    Serial.println(recData);
+
     if (recivedDone == true)
     {
 
-      // hspi->endTransaction();
-      // digitalWrite(HSPI_SS, HIGH);
       String copyOfRecData = recData; // In case of recData = "" while operating on that string
 
-      int t_start = copyOfRecData.indexOf("t");
-      int h_start = copyOfRecData.indexOf("h");
-      int ss_start = copyOfRecData.lastIndexOf("s");
-      String temperature = copyOfRecData.substring(t_start + 1, h_start);
-      String humidity = copyOfRecData.substring(h_start + 1, ss_start - 1);
-      String since_start_local = copyOfRecData.substring(ss_start + 1, copyOfRecData.length());
-      recData = "";
-      // Serial.print(temperature);
-      // Serial.print(" ");
-      // Serial.print(humidity);
-      // Serial.print(" ");
-      // Serial.print(since_start);
-      // Serial.println(" ");
-      if (temperature.toInt() > 0 && temperature.toInt() < 50)
+      if (copyOfRecData == "MOVE")
       {
-        currTemperature = temperature.toInt();
-      }
-      if (humidity.toInt() > 0 && humidity.toInt() <= 100)
-      {
-        currHumidity = humidity.toInt();
-      }
+        struct tm timeinfo;
 
-      since_start = since_start_local;
-      recivedDone = false;
-      if (uploadNeeded)
-      {
-        http_request(10);
-        uploadNeeded = false;
+        memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
+
+        if (!getLocalTime(&timeinfo))
+        {
+          Serial.println("Failed to obtain time");
+          moveTimes[moveCounter] = String("Time null") + String("|");
+          moveCounter++;
+          if (moveCounter >= 340)
+          {
+            moveCounter = 0;
+          }
+        }
+        else
+        {
+          strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
+          moveTimes[moveCounter] = String(timeAll) + String("|");
+          moveCounter++;
+          if (moveCounter >= 340)
+          {
+            moveCounter = 0;
+          }
+        }
+
       }
-      // hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-      // digitalWrite(HSPI_SS, LOW);
+      else
+      {
+        int t_start = copyOfRecData.indexOf("t");
+        int h_start = copyOfRecData.indexOf("h");
+        int ss_start = copyOfRecData.lastIndexOf("s");
+        String temperature = copyOfRecData.substring(t_start + 1, h_start);
+        String humidity = copyOfRecData.substring(h_start + 1, ss_start - 1);
+        String since_start_local = copyOfRecData.substring(ss_start + 1, copyOfRecData.length());
+        recData = "";
+        // Serial.print(temperature);
+        // Serial.print(" ");
+        // Serial.print(humidity);
+        // Serial.print(" ");
+        // Serial.print(since_start);
+        // Serial.println(" ");
+        if (temperature.toInt() > 0 && temperature.toInt() < 50)
+        {
+          currTemperature = temperature.toInt();
+        }
+        if (humidity.toInt() > 0 && humidity.toInt() <= 100)
+        {
+          currHumidity = humidity.toInt();
+        }
+
+        since_start = since_start_local;
+        if (uploadNeeded)
+        {
+          http_request(10);
+          uploadNeeded = false;
+        }
+      }
+      recivedDone = false;
+      recData = "";
     }
     prevMillisSPI = millis();
   }
@@ -692,7 +796,6 @@ void loop()
 
 String sendPhoto()
 {
-  // WiFiClient client;
   String getAll;
   String getBody;
 
@@ -701,47 +804,41 @@ String sendPhoto()
 
   if (!fb)
   {
-    // Serial.println("Camera capture failed");
+    Serial.println("Error while getting image");
     delay(1000);
     ESP.restart();
   }
 
   // Serial.println("Connecting to server: " + serverIP);
 
-  if (live_client.connect(serverIP.c_str(), serverPort))
+  if (live_client.connect(serverIP.c_str(), 3000))
   {
 
     struct tm timeinfo;
 
     if (!getLocalTime(&timeinfo))
     {
-      // Serial.println("Failed to obtain time");
+      Serial.println("Failed to obtain time");
     }
-    // Serial.println(&timeinfo,"%Y%m%d");
-    char timeAll[24];
-    strftime(timeAll, 20, "%Y%m%d_%H%M%S", &timeinfo); // Load time
-
-    // Serial.println(timeAll);
-    // Serial.println(timeAll[20]);
-    // Serial.println("Connection successful!");
-    String head = "--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"imageFile\"; filename=\"esp32photo_" + String(timeAll) + ".jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    String tail = "\r\n--RandomNerdTutorials--\r\n";
+    strftime(timeAll, 20, "%m%d_%H%M%S", &timeinfo); // Load time
 
     uint32_t imageLen = fb->len;
-    uint32_t extraLen = head.length() + tail.length();
-    uint32_t totalLen = imageLen + extraLen;
+    uint32_t totalLen = imageLen;
+
+    Serial.println("Starting request");
 
     live_client.println("POST " + serverPath + " HTTP/1.1");
-    live_client.println("Host: " + serverIP);
-    live_client.println("Content-Length: " + String(totalLen));
-    live_client.println("Content-Type: multipart/form-data; boundary=RandomNerdTutorials"); // Creating first headers in HTTP request
+    live_client.println("Host: " + serverIP + ":3000");
+    live_client.println("Connection: keep-alive");
+    live_client.println("Content-Length: " + String(imageLen));
+    live_client.println("Content-Type: application/octet-stream"); // Creating first headers in HTTP request
     live_client.println();
-    live_client.print(head);
+
+    Serial.println("Starting sending photo");
 
     uint8_t *fbBuf = fb->buf;
 
     size_t fbLen = fb->len;
-    // Serial.println(fbLen);
 
     for (size_t n = 0; n < fbLen; n = n + 1024)
     { // Start sending image
@@ -756,8 +853,6 @@ String sendPhoto()
         live_client.write(fbBuf, remainder);
       }
     }
-    // Serial.println("bruh!");
-    live_client.print(tail);
 
     esp_camera_fb_return(fb);
 
@@ -768,7 +863,6 @@ String sendPhoto()
 
     while ((startTimer + timoutTimer) > millis())
     {
-      // Serial.print(".");
       delay(50);
       while (live_client.available())
       {
@@ -799,18 +893,10 @@ String sendPhoto()
         break;
       }
     }
-
-    // Serial.println("to tera usuwom!");
-
-    // Serial.println();
-
-    // Serial.println(getBody);
-    // Serial.println();
   }
   else
   {
     getBody = "Connection to " + serverIP + " failed.";
-    // Serial.println(getBody);
   }
 
   return getBody;

@@ -52,6 +52,34 @@
             filter: brightness(85%);
         }
 
+        .showData {
+            margin-left: 3vw;
+            width: 3.5vw;
+            height: 1.5vw;
+        }
+
+        .manageData {
+            text-align: center;
+            padding-left: 40%;
+            padding-right: 40%;
+        }
+
+        .dataLabel {
+            padding: 10px;
+            margin: 10px;
+            font-size: 16px;
+            background-color: #ccdaff;
+            border: 1px solid #111;
+            border-radius: 5px;
+        }
+
+        .deleteButton {
+            background-color: red;
+            width: 15%;
+            font-size: 17px;
+            color: white;
+        }
+
         #lazikImg {
             position: absolute;
             height: 90px;
@@ -269,6 +297,8 @@
             <img id="video" />
         </div>
         <div id="curve_chart"></div>
+        <button type="button" class="showData">Show data</button>
+        <div class="manageData"></div>
         <div id="measures">
             <div class="column">
                 <p class="measure" id="temp">0&#176;C</p>
@@ -366,18 +396,19 @@
         sendData("joystickFalse");
 
         function drawChart() {
-            let arrayToGoogle = [
-                ["Date", "Temperature (°C)", "Humidity (%)"],
-            ];
+            let arrayToGoogle = [["Date", "Temperature (°C)", "Humidity (%)"]];
 
-
-            roverData.forEach(n => {
-                arrayToGoogle.push([n.date_time.split("T")[0], n.temperature, n.humidity]);
+            roverData.forEach((n) => {
+                arrayToGoogle.push([
+                    n.date_time.split("T")[0],
+                    n.temperature,
+                    n.humidity,
+                ]);
             });
 
             var data = google.visualization.arrayToDataTable(arrayToGoogle);
 
-            console.log(typeof (data));
+            console.log(typeof data);
 
             var options = {
                 title: "Measures",
@@ -420,12 +451,67 @@
             }
         }
 
+        async function createLables(data) {
+            $(".manageData").empty();
+            for (const [i, n] of data.entries()) {
+                console.log(i, n);
+                let div = document.createElement("div");
+                div.className = "dataLabel";
+
+                let paragraph = document.createElement("p");
+                let dateTime = n["date_time"].split(".")[0].replace("T", " ");
+
+                paragraph.innerHTML = `Temp: ${n["temperature"]}°C <br> Hum: ${n["humidity"]}% <br> Date: ${dateTime}`;
+
+                let deleteButton = document.createElement("button");
+                deleteButton.className = "deleteButton";
+                deleteButton.innerHTML = "DEL";
+
+                div.appendChild(paragraph);
+                div.appendChild(deleteButton);
+
+                deleteButton.addEventListener("click", () => {
+                    fetch(`http://${data_server_ip}:3000/delete`, {
+                        method: "DELET",
+                        mode: "cors",
+                        headers: {
+                            "Access-Control-Request-Method": "*",
+                            "Access-Control-Allow-Origin": "*",
+                            Vary: "*",
+                        },
+                    });
+                });
+
+                $(".manageData").append(div);
+            }
+        }
+
+        function showDataOnSite() {
+            fetch(`http://${data_server_ip}:3000/chartData`, {
+                method: "GET",
+                mode: "cors",
+                headers: {
+                    "Access-Control-Request-Method": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    Vary: "*",
+                },
+            })
+                .then((response) => response.json())
+                .then((jsonResponse) => {
+                    createLables(jsonResponse);
+                })
+                .catch((err) => {
+                    console.log("Failed to send data", err);
+                });
+        }
+
         function desktopBinds() { }
 
         function mobileBinds() { }
 
         function defaultBinds() {
             $("#darkLight").on("click", changeSiteStyle);
+            $(".showData").on("click", showDataOnSite);
         }
 
         window.onload = () => {

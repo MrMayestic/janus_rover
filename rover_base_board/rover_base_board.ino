@@ -1,7 +1,8 @@
 #include <Servo.h>
 #include <SPI.h>
-
 #include "dht.h"
+#include <avr/power.h>
+
 #define dht_apin 22
 dht DHT;
 
@@ -25,6 +26,7 @@ dht DHT;
 #define TRIG_PIN A5
 
 #define servopin 3
+#define PIRpin 40
 
 int deg = 0;
 
@@ -35,6 +37,7 @@ int xPos, yPos, tPos;
 unsigned long prevMillisUSS = 0;
 unsigned long prevMillisSEND = 0;
 unsigned long prevMillisSTOP = 0;
+unsigned long prevMillisPIR = 0;
 
 unsigned long timeToStop = -1;
 
@@ -51,6 +54,8 @@ bool doesForward = false;
 
 bool waiter = false;
 bool xToggle = false;
+
+bool lowEnergyMode = false;
 
 volatile bool receivedone; /* use reception complete flag */
 
@@ -522,7 +527,6 @@ void requestsHandler(String message)
   {
     stoper();
   }
-
   else if (message == "/servoplus")
   {
     SerPls();
@@ -531,6 +535,12 @@ void requestsHandler(String message)
   else if (message == "/servominus")
   {
     SerMin();
+  }
+  else if (message == "lowEn")
+  {
+    // Serial.println("lowEnergy mode base");
+    lowEnergyMode = true;
+    digitalWrite(LED_BUILTIN, LOW);
   }
 }
 
@@ -573,6 +583,24 @@ String getReadableTime()
 
 void setup()
 {
+  power_adc_disable();
+  power_usart1_disable();
+  power_usart2_disable();
+  // power_timer1_disable();
+  // power_timer2_disable();
+  // // power_timer3_disable();
+  // power_timer4_disable();
+  // power_timer5_disable();
+  power_twi_disable();
+
+  for (int i = 0; i <= 53; i++)
+  {
+    if (i == 12)
+      continue;
+    pinMode(i, OUTPUT);
+    digitalWrite(i, LOW);
+  }
+
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
   delay(1000);
@@ -598,6 +626,7 @@ void setup()
 
   pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
   pinMode(ECHO_PIN, INPUT);  // Sets the echoPin as an INPUT
+  pinMode(PIRpin, INPUT);
 
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
@@ -623,7 +652,6 @@ void setup()
 
 void loop()
 {
-  // Serial.println("test");
   if (timeToStop > 0)
   {
     if (millis() - prevMillisSTOP >= timeToStop)
@@ -633,8 +661,9 @@ void loop()
     }
   }
 
-  if (millis() - prevMillisSEND >= 500)
+  if (millis() - prevMillisSEND >= 4000)
   {
+    // Serial.println("elo");
     DHT.read11(dht_apin);
 
     prevMillisSEND = millis();
@@ -661,12 +690,16 @@ void loop()
 
     // sendData("test");
   }
-  if (millis() - prevMillisUSS >= ultrasonicInterval)
+  if (millis() - prevMillisUSS >= ultrasonicInterval && !lowEnergyMode)
   {
 
     if (getDistance() < 29)
     {
-      digitalWrite(LED_BUILTIN, HIGH);
+      if (!lowEnergyMode)
+      {
+        // digitalWrite(LED_BUILTIN, HIGH);
+      }
+
       if ((colideToggle == false) && doesForward == true)
       {
         stoper();
@@ -676,10 +709,24 @@ void loop()
     }
     else
     {
-      digitalWrite(LED_BUILTIN, LOW);
+      if (!lowEnergyMode)
+      {
+        // digitalWrite(LED_BUILTIN, LOW);
+      }
       colideToggle = false;
     }
     prevMillisUSS = millis();
+  }
+
+  if (millis() - prevMillisPIR >= 5000)
+  {
+    int result = digitalRead(PIRpin);
+    if (result)
+    {
+      sendData("MOVE");
+    }
+    digitalWrite(LED_BUILTIN, result);
+    prevMillisPIR = millis();
   }
 }
 

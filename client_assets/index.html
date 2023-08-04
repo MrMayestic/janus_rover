@@ -16,6 +16,37 @@
             user-select: none;
         }
 
+        #moveResults {
+            margin-top: 17%;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+
+        #lowEnergy,
+        #normalEnergy,
+        #moveReq {
+            padding: 0.3vw;
+            z-index: 5;
+        }
+
+        .time:first-of-type {
+            padding: 1vw 9vw;
+            font-size: 48px;
+            white-space: pre;
+            background-color: #fdffe0;
+        }
+
+        .time {
+            padding: 10px;
+            margin: 5px;
+            background-color: lightblue;
+            border: #111 solid 1px;
+            font-size: 28px;
+            text-align: center;
+            border-radius: 5px;
+        }
+
         a {
             text-decoration: none;
         }
@@ -217,6 +248,7 @@
             width: 100%;
             justify-content: center;
             margin-top: 360px;
+            z-index: 1;
         }
 
         #temp {
@@ -381,29 +413,6 @@
             }
         }
 
-        @media only screen and (max-width: 707px) {
-            li {
-                width: 24vw;
-                height: 10.3vw;
-                line-height: 10.3vw;
-                font-size: 5.2vw;
-            }
-
-            .servoButton {
-                width: 5.2vw;
-            }
-
-            #servoInfo {
-                height: 5vw;
-                line-height: 5vw;
-            }
-
-            #servoSter {
-                margin-left: 66.5%;
-                max-height: 22vw;
-            }
-        }
-
         @media only screen and (max-width: 420px) {
             ul {
                 flex-direction: column;
@@ -431,6 +440,17 @@
                 font-size: 3vw;
             }
 
+            .servoButton {
+                width: 8vw;
+                margin-left: 7vw;
+            }
+
+            .sterButton {
+                width: 11vw;
+                height: 11vw;
+                padding: 5px;
+            }
+
             #servoSter {
                 margin-left: 70%;
                 max-height: 33vw;
@@ -438,7 +458,7 @@
 
             #precSterInfo {
                 line-height: 5.3vw;
-                font-size: 3.5vw;
+                font-size: 3.1vw;
             }
 
             #precSter {
@@ -449,6 +469,7 @@
             }
 
             #measures {
+                margin-top: 40vw;
                 font-size: 22px;
             }
         }
@@ -498,8 +519,19 @@
             </div>
         </div>
         <button type="button" id="sendPhoto">Send photo</button>
+        <br>
+        <br>
+        <button type="button" id="lowEnergy">Low Energy</button>
+        <br>
+        <br>
+        <button type="button" id="normalEnergy">Normal Energy</button>
     </main>
     <p id="info">null</p>
+    <br>
+    <br>
+    <button type="button" id="moveReq">Move Results</button>
+    <div id="moveResults"></div>
+    </div>
     <script>
         let sendDataToggle = true;
         let style = "dark"; //reversed logic kind of xd
@@ -529,13 +561,28 @@
             })
                 .then((response) => response.json())
                 .then((data) => {
-                    if (data.temperature > 0 && data.temperature < 50) {
-                        document.querySelector(
-                            "#temp"
-                        ).innerHTML = `${data.temperature}&#176;C`;
-                    }
-                    if (data.humidity > 0 && data.temperature <= 100) {
-                        document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                    if (what == "moveResults") {
+                        $("#moveResults").html("");
+                        let times = data.data.split("|");
+                        times = times.sort();
+                        times = times.reverse();
+                        for (n of times) {
+                            if (n) {
+                                let p = document.createElement("p");
+                                p.className = "time";
+                                p.innerHTML = n;
+                                document.querySelector("#moveResults").appendChild(p);
+                            }
+                        }
+                    } else {
+                        if (data.temperature > 0 && data.temperature < 50) {
+                            document.querySelector(
+                                "#temp"
+                            ).innerHTML = `${data.temperature}&#176;C`;
+                        }
+                        if (data.humidity > 0 && data.temperature <= 100) {
+                            document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                        }
                     }
                 })
                 .catch((err) => {
@@ -652,6 +699,11 @@
 
             $("#servoPlus").on("click", () => sendData("servoplus"));
             $("#servoMinus").on("click", () => sendData("servominus"));
+
+            $("#lowEnergy").on("click", () => sendData("lowEnergy"));
+            $("#normalEnergy").on("click", () => sendData("normalEnergy"));
+
+            $("#moveReq").on("click", () => sendData("moveResults"));
         }
 
         $("#sendPhoto").on("click", () => sendData("sendPhoto"))
@@ -666,7 +718,7 @@
                 desktopBinds();
             }
             defaultBinds();
-            setInterval(() => sendData("data"), 1000);
+            setInterval(() => sendData("data"), 10000);
         }
 
     </script>

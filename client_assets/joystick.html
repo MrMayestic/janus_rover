@@ -166,6 +166,10 @@
             margin-top: 25px;
         }
 
+        #Wheels {
+            margin-left: 37vw;
+        }
+
         #servoSter {
             margin-top: 0;
             margin-left: 49%;
@@ -483,70 +487,6 @@
             }
         }
 
-        @media only screen and (max-width: 560px) {
-            #onOffVideo {
-                width: 40px;
-                height: 30px;
-                font-size: 2.2vw;
-            }
-
-            #servoInfo {
-                height: 7.5vw;
-                line-height: 7.5vw;
-                font-size: 3vw;
-            }
-
-            #servoSter {
-                max-height: 30.5vw;
-            }
-
-            #arrowSter {
-                margin-left: 15%;
-            }
-
-            #content {
-                margin-left: 9%;
-            }
-
-            .sterButton {
-                border: 1px solid black;
-                border-radius: 5px;
-                width: 11vw;
-                height: 11vw;
-                margin: 2.5px;
-            }
-
-            .servoButton {
-                border: 1px solid black;
-                border-radius: 5px;
-                background-color: #d1d1d1;
-                width: 7vw;
-            }
-
-            #precSterInfo {
-                line-height: 4vw;
-                margin-left: 1%;
-                font-size: 3.4vw;
-            }
-
-            #precSter {
-                margin-left: 1%;
-                height: 5vw;
-                width: 7.5vw;
-                font-size: 2.4vw;
-            }
-
-            #measures {
-                margin: 0;
-                margin-top: 35vw;
-            }
-
-            .column {
-                margin-left: 30px;
-                margin-right: 30px;
-            }
-        }
-
         @media only screen and (max-width: 420px) {
             ul {
                 flex-direction: column;
@@ -557,6 +497,11 @@
                 height: 15vw;
                 line-height: 15vw;
                 font-size: 7vw;
+            }
+
+            .servoButton {
+                width: 8vw;
+                margin-left: 1vw;
             }
 
             #video {
@@ -654,12 +599,6 @@
         <div class="clear" id="joystick"><button type="button" id="joyButton"></button>
         </div>
         <button type="button" id="onOffVideo">Off</button>
-        <div class="clear" id="ratios">
-            <p class="index" id="firstindex">RatioX:</p>
-            <p class="floatLeft littleMarginRight" id="ratioX">null</p>
-            <p class="floatLeft index">RatioY:</p>
-            <p class=" floatLeft" id="ratioY">null</p>
-        </div>
         <div id="Wheels">
             <p class="index clear">Left:</p>
             <p class="floatLeft littleMarginRight" id="left">null</p>
@@ -721,7 +660,6 @@
         };
 
         async function sendData(what) {
-            // console.log(what);
             $("#info").html(what);
             fetch(`http://${server_ip}/` + what, {
                 method: "GET",
@@ -774,19 +712,12 @@
 
             toCenterPos = joyButtonAP.width / 2
 
-            // let currJoyButParams = joyButton.getBoundingClientRect();
-
-            console.log("params", joyAP);
-
             if (mousX < joyAP.left + toCenterPos) {
                 $("#joyButton").css("left", `0px`);
-                console.log("left");
             } else if (mousX > joyAP.right - toCenterPos) {
                 $("#joyButton").css("right", `${joyAP.width - joyButtonAP.width}px`);
-                console.log("right");
             } else {
                 $("#joyButton").css("left", `${mousX - toCenterPos - joyAP.x}px`);
-                console.log("else");
             }
 
             if (mousY < joyAP.top + toCenterPos) {
@@ -797,22 +728,14 @@
                 $("#joyButton").css("top", `${mousY - toCenterPos - joyAP.y}px`);
             }
 
-            console.log("button", joyButtonAP.x, joyButtonAP.y)
-
             let relX = (joyButtonAP.x + toCenterPos - joyAP.x) - ((joyAP.width) / 2);
             let relY = (joyButtonAP.y + toCenterPos - joyAP.y) - ((joyAP.height) / 2);
-
-            $("#convX").html(relX);
-            $("#convY").html(relY);
 
             let ratioX = relX / ((joyAP.width - (toCenterPos * 2)) / 2);
             let ratioY = relY / ((joyAP.height - (toCenterPos * 2)) / 2);
 
             let Xtoggle = true;
             let Ytoggle = true;
-
-            $("#ratioX").html(ratioX);
-            $("#ratioY").html(ratioY);
 
             if (ratioX < 0) {
                 Xtoggle = false;
@@ -906,8 +829,6 @@
 
                 $("#joyButton").css({ "top": (joyAP.height / 2) - (joyButtonAP.height / 2), "left": (joyAP.width / 2) - (joyButtonAP.width / 2) });
 
-                $("#left").html(currentL);
-                $("#right").html(currentR);
             });
         }
 
@@ -925,9 +846,6 @@
                 currentR = 0;
 
                 $("#joyButton").css({ "top": (joyAP.height / 2) - (joyButtonAP.height / 2), "left": (joyAP.width / 2) - (joyButtonAP.width / 2) });
-
-                $("#left").html(currentL);
-                $("#right").html(currentR);
             });
         }
 

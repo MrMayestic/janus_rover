@@ -4,3 +4,5 @@ rover_web_board.ino.esp32.bin
 .theia
 .env
 wifi_config.h
+charts.js
+data.js

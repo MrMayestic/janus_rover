@@ -18,6 +18,37 @@ const char INDEX_page[] PROGMEM = R"=====(
             user-select: none;
         }
 
+        #moveResults {
+            margin-top: 17%;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+
+        #lowEnergy,
+        #normalEnergy,
+        #moveReq {
+            padding: 0.3vw;
+            z-index: 5;
+        }
+
+        .time:first-of-type {
+            padding: 1vw 9vw;
+            font-size: 48px;
+            white-space: pre;
+            background-color: #fdffe0;
+        }
+
+        .time {
+            padding: 10px;
+            margin: 5px;
+            background-color: lightblue;
+            border: #111 solid 1px;
+            font-size: 28px;
+            text-align: center;
+            border-radius: 5px;
+        }
+
         a {
             text-decoration: none;
         }
@@ -305,49 +336,7 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
         }
 
-        @media only screen and (max-width: 1270px) {
-            .sterButton {
-                width: 7vw;
-                height: 7vw;
-                margin: 3px;
-            }
-
-            .servoButton {
-                width: 5vw;
-            }
-
-            #servoInfo {
-                height: 5vw;
-                line-height: 5vw;
-                font-size: 1.5vw;
-            }
-
-            #servoSter {
-                max-height: 18vw;
-            }
-
-            #video {
-                width: 49vw;
-                height: 36.75vw;
-            }
-
-            #arrowSter {
-                margin-left: 27%;
-            }
-
-            #precSter {
-                width: 5.5vw;
-                height: 2.75vw;
-                line-height: 2.75vw;
-                font-size: 1.3vw;
-            }
-
-            #measures {
-                margin-top: 21vw;
-            }
-        }
-
-        @media only screen and (max-width: 1120px) {
+        @media only screen and (max-width: 1180px) {
             #video {
                 width: 50vw;
                 height: 37.5vw;
@@ -425,94 +414,6 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
         }
 
-        @media only screen and (max-width: 707px) {
-            li {
-                width: 24vw;
-                height: 10.3vw;
-                line-height: 10.3vw;
-                font-size: 5.2vw;
-            }
-
-            .servoButton {
-                width: 5.2vw;
-            }
-
-            #servoInfo {
-                height: 5vw;
-                line-height: 5vw;
-            }
-
-            #servoSter {
-                margin-left: 66.5%;
-                max-height: 22vw;
-            }
-        }
-
-        @media only screen and (max-width: 560px) {
-            #onOffVideo {
-                margin-left: 44%;
-                width: 40px;
-                height: 30px;
-                font-size: 2.2vw;
-            }
-
-            #servoInfo {
-                height: 7.5vw;
-                line-height: 7.5vw;
-                font-size: 3vw;
-            }
-
-            #servoSter {
-                max-height: 30.5vw;
-            }
-
-            #arrowSter {
-                margin-left: 15%;
-            }
-
-            #content {
-                margin-left: 9%;
-            }
-
-            .sterButton {
-                border: 1px solid black;
-                border-radius: 5px;
-                width: 11vw;
-                height: 11vw;
-                margin: 2.5px;
-            }
-
-            .servoButton {
-                border: 1px solid black;
-                border-radius: 5px;
-                background-color: #d1d1d1;
-                width: 7vw;
-            }
-
-            #precSterInfo {
-                line-height: 4vw;
-                margin-left: 1%;
-                font-size: 3.4vw;
-            }
-
-            #precSter {
-                margin-left: 1%;
-                height: 5vw;
-                width: 7.5vw;
-                font-size: 2.4vw;
-            }
-
-            #measures {
-                margin: 0;
-                margin-top: 35vw;
-            }
-
-            .column {
-                margin-left: 30px;
-                margin-right: 30px;
-            }
-        }
-
         @media only screen and (max-width: 420px) {
             ul {
                 flex-direction: column;
@@ -540,6 +441,17 @@ const char INDEX_page[] PROGMEM = R"=====(
                 font-size: 3vw;
             }
 
+            .servoButton {
+                width: 8vw;
+                margin-left: 7vw;
+            }
+
+            .sterButton {
+                width: 11vw;
+                height: 11vw;
+                padding: 5px;
+            }
+
             #servoSter {
                 margin-left: 70%;
                 max-height: 33vw;
@@ -547,7 +459,7 @@ const char INDEX_page[] PROGMEM = R"=====(
 
             #precSterInfo {
                 line-height: 5.3vw;
-                font-size: 3.5vw;
+                font-size: 3.1vw;
             }
 
             #precSter {
@@ -558,6 +470,7 @@ const char INDEX_page[] PROGMEM = R"=====(
             }
 
             #measures {
+                margin-top: 40vw;
                 font-size: 22px;
             }
         }
@@ -570,7 +483,7 @@ const char INDEX_page[] PROGMEM = R"=====(
         <ul>
             <li><a href="index.html">Sterring</a></li>
             <li><a href="joystick.html">Joystick</a></li>
-            <li>Data</li>
+            <li><a href="data.html">Data</a></li>
             <li style="float: right">About</li>
         </ul>
     </nav>
@@ -595,9 +508,7 @@ const char INDEX_page[] PROGMEM = R"=====(
         </div>
         <div id="servoSter">
             <button type="button" id="servoPlus" class="servoButton"> &#8593; </button>
-            <!-- <br> -->
             <p id="servoInfo">Servo</p>
-            <!-- <br> -->
             <button type="button" id="servoMinus" class="servoButton"> &#8595; </button>
         </div>
         <div id="measures">
@@ -608,8 +519,20 @@ const char INDEX_page[] PROGMEM = R"=====(
                 <p class="measure" id="humi">0%</p>
             </div>
         </div>
+        <button type="button" id="sendPhoto">Send photo</button>
+        <br>
+        <br>
+        <button type="button" id="lowEnergy">Low Energy</button>
+        <br>
+        <br>
+        <button type="button" id="normalEnergy">Normal Energy</button>
     </main>
     <p id="info">null</p>
+    <br>
+    <br>
+    <button type="button" id="moveReq">Move Results</button>
+    <div id="moveResults"></div>
+    </div>
     <script>
         let sendDataToggle = true;
         let style = "dark"; //reversed logic kind of xd
@@ -617,7 +540,7 @@ const char INDEX_page[] PROGMEM = R"=====(
         let precLetter = ""; //to usprawnić sending data
         let streamOnToggle = false;
         let userDevice = "";
-        let server_ip = "change_this_ip";
+        let server_ip = "192.168.11.43";
 
         window.mobileAndTabletCheck = function () {
             let check = false;
@@ -639,13 +562,28 @@ const char INDEX_page[] PROGMEM = R"=====(
             })
                 .then((response) => response.json())
                 .then((data) => {
-                    if (data.temperature > 0 && data.temperature < 50) {
-                        document.querySelector(
-                            "#temp"
-                        ).innerHTML = `${data.temperature}&#176;C`;
-                    }
-                    if (data.humidity > 0 && data.temperature <= 100) {
-                        document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                    if (what == "moveResults") {
+                        $("#moveResults").html("");
+                        let times = data.data.split("|");
+                        times = times.sort();
+                        times = times.reverse();
+                        for (n of times) {
+                            if (n) {
+                                let p = document.createElement("p");
+                                p.className = "time";
+                                p.innerHTML = n;
+                                document.querySelector("#moveResults").appendChild(p);
+                            }
+                        }
+                    } else {
+                        if (data.temperature > 0 && data.temperature < 50) {
+                            document.querySelector(
+                                "#temp"
+                            ).innerHTML = `${data.temperature}&#176;C`;
+                        }
+                        if (data.humidity > 0 && data.temperature <= 100) {
+                            document.querySelector("#humi").innerHTML = `${data.humidity}%`;
+                        }
                     }
                 })
                 .catch((err) => {
@@ -762,7 +700,15 @@ const char INDEX_page[] PROGMEM = R"=====(
 
             $("#servoPlus").on("click", () => sendData("servoplus"));
             $("#servoMinus").on("click", () => sendData("servominus"));
+
+            $("#lowEnergy").on("click", () => sendData("lowEnergy"));
+            $("#normalEnergy").on("click", () => sendData("normalEnergy"));
+
+            $("#moveReq").on("click", () => sendData("moveResults"));
         }
+
+        $("#sendPhoto").on("click", () => sendData("sendPhoto"))
+
         sendData("joystickFalse");
 
         window.onload = () => {
@@ -773,7 +719,7 @@ const char INDEX_page[] PROGMEM = R"=====(
                 desktopBinds();
             }
             defaultBinds();
-            setInterval(() => sendData("data"), 1000);
+            setInterval(() => sendData("data"), 10000);
         }
 
     </script>

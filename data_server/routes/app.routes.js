@@ -13,5 +13,6 @@ export function setRoutes() {
     router.use("/data", controllers.useData);
     router.get("/chartData", controllers.chartData);
     router.post("/image",controllers.saveImage)
+    router.delete("/data",controllers.deleteData)
     return router;
  };

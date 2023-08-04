@@ -951,7 +951,7 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
             defaultBinds();
             setInterval(() => sendData(`x${currentL}y${currentR}`), 100);
         }
-        setInterval(() => sendData(`data`), 1000);
+        setInterval(() => sendData(`data`), 3000);
 
     </script>
 </body>

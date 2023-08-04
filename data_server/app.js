@@ -29,32 +29,13 @@ app.listen(3000, () => {
   console.log("Listening on port 3000");
 });
 
-var db = mysql.createConnection({
+var db = mysql.createPool({
+  connectionLimit: 100,
+  acquireTimeout: 20000,
   host: process.env.HOST,
   user: process.env.USER,
   password: process.env.PASSWORD,
   database: process.env.DATABASE,
-
-  queryFormat: function (query, values) {
-    if (!values) return query;
-    return query.replace(
-    /\:(\w+)/g,
-     function (txt, key) {
-      if (values.hasOwnProperty(key)) {
-      return this.escape(values[key]);
-    }
-    return txt;
-     }.bind(this)
-    );
-  }
-});
-
-db.connect(function (err) {
-  if (err) {
-    console.log("Error \n", err);
-  } else {
-    console.log("Connected!");
-  }
 });
 
 export default db
