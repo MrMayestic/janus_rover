@@ -6,20 +6,20 @@
 #define dht_apin 22
 dht DHT;
 
-#define DATAOUT 51    // MOSI
-#define DATAIN 50     // MISO
-#define SPICLOCK 52   // sck
-#define CHIPSELECT 53 // ss
+#define DATAOUT 51     // MOSI
+#define DATAIN 50      // MISO
+#define SPICLOCK 52    // sck
+#define CHIPSELECT 53  // ss
 
 /*define channel enable output pins*/
-#define ENA 5 // Left  wheel speed
-#define ENB 6 // Right wheel speed
+#define ENA 5  // Left  wheel speed
+#define ENB 6  // Right wheel speed
 /*define logic control output pins*/
-#define IN1 7        // Left  wheel forward
-#define IN2 8        // Left  wheel reverse
-#define IN3 9        // Right wheel reverse
-#define IN4 11       // Right wheel forward
-#define carSpeed 250 // initial speed of car >=0 to <=255
+#define IN1 7         // Left  wheel forward
+#define IN2 8         // Left  wheel reverse
+#define IN3 9         // Right wheel reverse
+#define IN4 11        // Right wheel forward
+#define carSpeed 250  // initial speed of car >=0 to <=255
 #define LowCarSpeed 100
 
 #define ECHO_PIN A4
@@ -27,6 +27,7 @@ dht DHT;
 
 #define servopin 3
 #define PIRpin 40
+#define CONTROL_PIN 44
 
 int deg = 0;
 
@@ -38,20 +39,26 @@ unsigned long prevMillisUSS = 0;
 unsigned long prevMillisSEND = 0;
 unsigned long prevMillisSTOP = 0;
 unsigned long prevMillisPIR = 0;
+unsigned long prevMillisControl = 0;
+
+unsigned long moveDetectionTimeout = 11000;
 
 unsigned long timeToStop = -1;
 
-unsigned int ultrasonicInterval = 75;
+unsigned int ultrasonicInterval = 100;
+
+int lastControlState = 0;
+
 
 int currTemp = 0;
 int currHumi = 0;
 
-unsigned long duration; // variable for the duration of sound wave travel
-int distance;           // variable for the distance measurement
+unsigned long duration;  // variable for the duration of sound wave travel
+int distance;            // variable for the distance measurement
 
 bool colideToggle = false;
 bool doesForward = false;
-
+bool isMoving = false;
 bool waiter = false;
 bool xToggle = false;
 
@@ -82,10 +89,8 @@ Servo myservo;
 
 /* BEGIN DEFINING FUNCTIONS */
 
-void forward()
-{
-  if (colideToggle == false)
-  {
+void forward() {
+  if (colideToggle == false) {
     digitalWrite(ENA, HIGH);
     digitalWrite(ENB, HIGH);
 
@@ -99,11 +104,11 @@ void forward()
     //  Serial.println("go forward!");
     waiter = true;
     doesForward = true;
+    isMoving = true;
   }
 }
 
-void back()
-{
+void back() {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
   digitalWrite(IN1, LOW);
@@ -113,10 +118,10 @@ void back()
   //  Serial.println("go back!");
   waiter = true;
   doesForward = false;
+  isMoving = true;
 }
 
-void left()
-{
+void left() {
   analogWrite(ENA, carSpeed);
   analogWrite(ENB, carSpeed);
   digitalWrite(IN1, LOW);
@@ -126,10 +131,10 @@ void left()
   //  Serial.println("go left!");
   waiter = true;
   doesForward = false;
+  isMoving = true;
 }
 
-void right()
-{
+void right() {
   analogWrite(ENA, carSpeed);
   analogWrite(ENB, carSpeed);
   digitalWrite(IN1, HIGH);
@@ -139,46 +144,38 @@ void right()
   // Serial.println("go right!");
   waiter = true;
   doesForward = false;
+  isMoving = true;
 }
 
-void stoper()
-{
+void stoper() {
   digitalWrite(ENA, LOW);
   digitalWrite(ENB, LOW);
   doesForward = false;
   //  Serial.println("STOP!");
-  if (waiter == true)
-  {
+  if (waiter == true) {
     waiter = false;
     delay(150);
   }
+  isMoving = false;
 }
 
-void SerPls()
-{
+void SerPls() {
   deg = myservo.read() + 45;
 
-  if (deg < 175)
-  {
+  if (deg < 175) {
     myservo.write(deg);
-  }
-  else
-  {
+  } else {
     deg = 170;
     myservo.write(deg);
   }
 }
 
-void SerMin()
-{
+void SerMin() {
   deg = myservo.read() - 45;
 
-  if (deg > 0)
-  {
+  if (deg > 0) {
     myservo.write(deg);
-  }
-  else
-  {
+  } else {
     deg = 5;
     myservo.write(deg);
   }
@@ -186,22 +183,21 @@ void SerMin()
 
 /*ULTRASONIC*/
 
-unsigned int getDistance(void)
-{ // Getting distance
+unsigned int getDistance(void) {  // Getting distance
   digitalWrite(TRIG_PIN, LOW);
 
-  delayMicroseconds(2);
+  delayMicroseconds(1);
 
   // Sets the trigPin HIGH (ACTIVE) for 10 microseconds
   digitalWrite(TRIG_PIN, HIGH);
 
-  delay(3);
+  delay(2);
 
   digitalWrite(TRIG_PIN, LOW);
   // Reads the echoPin, returns the sound wave travel time in microseconds
   duration = pulseIn(ECHO_PIN, HIGH);
   // Calculating the distance
-  distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
+  distance = duration * 0.034 / 2;  // Speed of sound wave divided by 2 (go and back)
   // Displays the distance on the Serial Monitor
   // Serial.print("Distance: ");
   // Serial.print(distance);
@@ -212,37 +208,29 @@ unsigned int getDistance(void)
 
 // Function for joystick steering. X,Y are coordinates and mode is to tell program how rover's engines should be set in order to move along the appropriate axis.
 
-void joystickSterring(int x, int y, int mode)
-{
-  if (mode == 4)
-  {
+void joystickSterring(int x, int y, int mode) {
+  if (mode == 4) {
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
     digitalWrite(IN3, LOW);
     digitalWrite(IN4, HIGH);
 
     xToggle = false;
-  }
-  else if (mode == 3)
-  {
+  } else if (mode == 3) {
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
     digitalWrite(IN3, LOW);
     digitalWrite(IN4, HIGH);
 
     xToggle = false;
-  }
-  else if (mode == 2)
-  {
+  } else if (mode == 2) {
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, HIGH);
     digitalWrite(IN3, HIGH);
     digitalWrite(IN4, LOW);
 
     xToggle = true;
-  }
-  else if (mode == 1)
-  {
+  } else if (mode == 1) {
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, HIGH);
     digitalWrite(IN3, HIGH);
@@ -254,13 +242,10 @@ void joystickSterring(int x, int y, int mode)
   x = constrain(x, 0, 255);
   y = constrain(y, 0, 255);
 
-  if (xToggle)
-  {
+  if (xToggle) {
     analogWrite(ENB, x);
     analogWrite(ENA, y);
-  }
-  else
-  {
+  } else {
     analogWrite(ENA, x);
     analogWrite(ENB, y);
   }
@@ -268,25 +253,18 @@ void joystickSterring(int x, int y, int mode)
 
 // Function that handles joystick from web (wrote via js) which has diffrent working methods
 
-void WEBjoystickSterring(int x, int y)
-{
-  // Serial.println(x);
-  // Serial.println(y);
-  if (x > 0 && colideToggle)
-  {
+void WEBjoystickSterring(int x, int y) {
+  if (x > 0 && colideToggle) {
     return;
   }
 
-  if (y < 0)
-  {
+  if (y < 0) {
 
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, HIGH);
     digitalWrite(IN3, HIGH);
     digitalWrite(IN4, LOW);
-  }
-  else
-  {
+  } else {
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
     digitalWrite(IN3, LOW);
@@ -303,16 +281,13 @@ void WEBjoystickSterring(int x, int y)
   analogWrite(ENB, y);
 }
 
-void fill_buffer(String data)
-{
-  for (int i = 0; i <= data.length(); i++)
-  {
+void fill_buffer(String data) {
+  for (int i = 0; i <= data.length(); i++) {
     buffer[i] = (uint8_t)data[i];
   }
 }
 
-void sendData(String data)
-{
+void sendData(String data) {
   fill_buffer(data);
 
   SPI.transfer(buffer, data.length() + 1);
@@ -323,10 +298,8 @@ void sendData(String data)
 
 /*Function that handles messages from Master for example: to steering*/
 
-void requestsHandler(String message)
-{
-  if (message.indexOf("x") != -1)
-  {
+void requestsHandler(String message) {
+  if (message.indexOf("x") != -1) {
     xPos = 0;
     yPos = 0;
 
@@ -340,212 +313,148 @@ void requestsHandler(String message)
 
     tValue = message[tPos + 1];
 
-    for (int i = xPos + 1; i < yPos; i++)
-    {
+    for (int i = xPos + 1; i < yPos; i++) {
       xValue = xValue + message[i];
     }
 
-    if (tPos > 0)
-    {
+    if (tPos > 0) {
 
-      for (int i = yPos + 1; i < tPos; i++)
-      {
+      for (int i = yPos + 1; i < tPos; i++) {
         yValue = yValue + message[i];
       }
-    }
-    else
-    {
-      for (int i = yPos + 1; i < message.length(); i++)
-      {
+    } else {
+      for (int i = yPos + 1; i < message.length(); i++) {
         yValue = yValue + message[i];
       }
     }
 
-    // Serial.println(tValue.toInt());
-
-    if (tValue.toInt() > 0)
-    {
+    if (tValue.toInt() > 0) {
       joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
-    }
-    else
-    {
+    } else {
       WEBjoystickSterring(xValue.toInt(), yValue.toInt());
     }
-  }
-  else if (message == "sendData")
-  {
-    // Serial.println("aha");
+  } else if (message == "sendData") {
     memset(buffer, 0, sizeof(buffer));
     sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
-  }
-  else if (message == "/1")
-  {
+  } else if (message == "/1") {
     forward();
-  }
-  else if (message == "/2")
-  {
+  } else if (message == "/2") {
     left();
-  }
-  else if (message == "/3")
-  {
+  } else if (message == "/3") {
     back();
-  }
-  else if (message == "/4")
-  {
+  } else if (message == "/4") {
     right();
-  }
-  else if (message == "/lprec1")
-  {
+  } else if (message == "/lprec1") {
 
     forward();
 
     timeToStop = 800;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/lprec2")
-  {
+  } else if (message == "/lprec2") {
     left();
 
     timeToStop = 800;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/lprec3")
-  {
+  } else if (message == "/lprec3") {
     back();
 
     timeToStop = 800;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/lprec4")
-  {
+  } else if (message == "/lprec4") {
     right();
 
     timeToStop = 800;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/prec1")
-  {
+  } else if (message == "/prec1") {
     forward();
 
     timeToStop = 500;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/prec2")
-  {
+  } else if (message == "/prec2") {
     left();
 
     timeToStop = 500;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/prec3")
-  {
+  } else if (message == "/prec3") {
     back();
 
     timeToStop = 500;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/prec4")
-  {
+  } else if (message == "/prec4") {
     right();
 
     timeToStop = 500;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/sprec1")
-  {
+  } else if (message == "/sprec1") {
     forward();
 
     timeToStop = 150;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/sprec2")
-  {
+  } else if (message == "/sprec2") {
     left();
 
     timeToStop = 150;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/sprec3")
-  {
+  } else if (message == "/sprec3") {
     back();
 
     timeToStop = 150;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/sprec4")
-  {
+  } else if (message == "/sprec4") {
     right();
 
     timeToStop = 150;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/uprec1")
-  {
+  } else if (message == "/uprec1") {
     forward();
 
     timeToStop = 85;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/uprec2")
-  {
+  } else if (message == "/uprec2") {
     left();
 
     timeToStop = 85;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/uprec3")
-  {
+  } else if (message == "/uprec3") {
     back();
 
     timeToStop = 85;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/uprec4")
-  {
+  } else if (message == "/uprec4") {
     right();
 
     timeToStop = 85;
 
     prevMillisSTOP = millis();
-  }
-  else if (message == "/0") // USTAWIENIE PINOW NA LOW ABY WYLACZYC RUCH LAZIKA
+  } else if (message == "/0")  // USTAWIENIE PINOW NA LOW ABY WYLACZYC RUCH LAZIKA
   {
     stoper();
-  }
-  else if (message == "/servoplus")
-  {
+  } else if (message == "/servoplus") {
     SerPls();
-    // Serial.println("servo");
-  }
-  else if (message == "/servominus")
-  {
+  } else if (message == "/servominus") {
     SerMin();
-  }
-  else if (message == "lowEn")
-  {
-    // Serial.println("lowEnergy mode base");
+  } else if (message == "lowEn") {
     lowEnergyMode = true;
     digitalWrite(LED_BUILTIN, LOW);
   }
 }
 
-String getReadableTime()
-{
+String getReadableTime() {
   String readableTime;
 
   unsigned long currentMillis;
@@ -566,14 +475,12 @@ String getReadableTime()
 
   readableTime += String(hours) + ":";
 
-  if (minutes < 10)
-  {
+  if (minutes < 10) {
     readableTime += "0";
   }
   readableTime += String(minutes) + ":";
 
-  if (seconds < 10)
-  {
+  if (seconds < 10) {
     readableTime += "0";
   }
   readableTime += String(seconds);
@@ -581,9 +488,8 @@ String getReadableTime()
   return readableTime;
 }
 
-void setup()
-{
-  power_adc_disable();
+void setup() {
+  // power_adc_disable();
   power_usart1_disable();
   power_usart2_disable();
   // power_timer1_disable();
@@ -593,8 +499,7 @@ void setup()
   // power_timer5_disable();
   power_twi_disable();
 
-  for (int i = 0; i <= 53; i++)
-  {
+  for (int i = 0; i <= 53; i++) {
     if (i == 12)
       continue;
     pinMode(i, OUTPUT);
@@ -602,8 +507,8 @@ void setup()
   }
 
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(1000);
+  // digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
   digitalWrite(LED_BUILTIN, LOW);
   // irrecv.enableIRIn();
   // irrecv.blink13(true);
@@ -624,16 +529,17 @@ void setup()
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
 
-  pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
-  pinMode(ECHO_PIN, INPUT);  // Sets the echoPin as an INPUT
+  pinMode(TRIG_PIN, OUTPUT);  // Sets the trigPin as an OUTPUT
+  pinMode(ECHO_PIN, INPUT);   // Sets the echoPin as an INPUT
   pinMode(PIRpin, INPUT);
+  pinMode(CONTROL_PIN, INPUT);
 
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 
-  delay(100);
+  delay(50);
 
   SPCR |= _BV(SPE);
 
@@ -642,7 +548,7 @@ void setup()
   index = 0;
   receivedone = false;
 
-  delay(50);
+  delay(25);
 
   Serial.begin(230400);
   Serial.println("START");
@@ -650,67 +556,62 @@ void setup()
 
 /*Loop function*/
 
-void loop()
-{
-  if (timeToStop > 0)
-  {
-    if (millis() - prevMillisSTOP >= timeToStop)
-    {
+void loop() {
+  if (timeToStop > 0) {
+    if (millis() - prevMillisSTOP >= timeToStop) {
       stoper();
       timeToStop = -1;
     }
   }
 
-  if (millis() - prevMillisSEND >= 4000)
-  {
-    // Serial.println("elo");
+  if (millis() - prevMillisControl >= 4) {
+    if (digitalRead(CONTROL_PIN)) {
+
+    } else {
+      stoper();
+      delay(500);
+    }
+
+    prevMillisControl = millis();
+  }
+
+  if (millis() - prevMillisSEND >= 4000) {
     DHT.read11(dht_apin);
 
     prevMillisSEND = millis();
 
     bool changedToggle = false;
 
-    if ((int)DHT.temperature != currTemp)
-    {
+    if ((int)DHT.temperature != currTemp) {
       currTemp = (int)DHT.temperature;
       changedToggle = true;
     }
-    if ((int)DHT.humidity != currHumi)
-    {
+    if ((int)DHT.humidity != currHumi) {
       currHumi = (int)DHT.humidity;
       changedToggle = true;
     }
-    if (changedToggle)
-    {
+    if (changedToggle) {
       // Serial.println(currTemp);
       // Serial.println(currHumi);
       memset(buffer, 0, sizeof(buffer));
-      sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
+      sendData("_t" + String(currTemp) + "h" + String(currHumi) + "v" + String(getAccurateVoltage()) + "");
     }
 
     // sendData("test");
   }
-  if (millis() - prevMillisUSS >= ultrasonicInterval && !lowEnergyMode)
-  {
-
-    if (getDistance() < 29)
-    {
-      if (!lowEnergyMode)
-      {
+  if (millis() - prevMillisUSS >= ultrasonicInterval && !lowEnergyMode) {
+    if (getDistance() < 29) {
+      if (!lowEnergyMode) {
         // digitalWrite(LED_BUILTIN, HIGH);
       }
 
-      if ((colideToggle == false) && doesForward == true)
-      {
+      if ((colideToggle == false) && doesForward == true) {
         stoper();
       }
       colideToggle = true;
       delay(500);
-    }
-    else
-    {
-      if (!lowEnergyMode)
-      {
+    } else {
+      if (!lowEnergyMode) {
         // digitalWrite(LED_BUILTIN, LOW);
       }
       colideToggle = false;
@@ -718,22 +619,52 @@ void loop()
     prevMillisUSS = millis();
   }
 
-  if (millis() - prevMillisPIR >= 5000)
-  {
+  if (millis() - prevMillisPIR >= moveDetectionTimeout) {
+    moveDetectionTimeout = 50;
+
     int result = digitalRead(PIRpin);
-    if (result)
-    {
+    if (result && !isMoving) {
+      stoper();
+      // digitalWrite(LED_BUILTIN, HIGH);
       sendData("MOVE");
+      // delay(150);
+      moveDetectionTimeout = 1500;
     }
-    digitalWrite(LED_BUILTIN, result);
+    // digitalWrite(LED_BUILTIN, LOW);
     prevMillisPIR = millis();
   }
+
+  if (isMoving) {
+    moveDetectionTimeout = 15000;
+  }
+}
+
+// Internal power voltage control
+
+int getAccurateVoltage() {
+  getVoltage();
+  return getVoltage();
+}
+
+// Read the voltage of the battery the Arduino is currently running on (in millivolts)
+int getVoltage(void) {
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)  // For mega boards
+  const long InternalReferenceVoltage = 1115L;                  // Adjust this value to your boards specific internal BG voltage x1000
+  ADMUX = (0 << REFS1) | (1 << REFS0) | (0 << ADLAR) | (0 << MUX5) | (1 << MUX4) | (1 << MUX3) | (1 << MUX2) | (1 << MUX1) | (0 << MUX0);
+#else  // For 168/328 boards
+  const long InternalReferenceVoltage = 1091L;  // Adjust this value to your boards specific internal BG voltage x1000
+  ADMUX = (0 << REFS1) | (1 << REFS0) | (0 << ADLAR) | (1 << MUX3) | (1 << MUX2) | (1 << MUX1) | (0 << MUX0);
+#endif
+  ADCSRA |= _BV(ADSC);  // Start a conversion
+  while (((ADCSRA & (1 << ADSC)) != 0))
+    ;                                                                     // Wait for it to complete
+  int results = (((InternalReferenceVoltage * 1024L) / ADC) + 5L) / 10L;  // Scale the value; calculates for straight line value
+  return results * 10;                                                    // convert from centivolts to millivolts
 }
 
 /* ISR that handles reciving data via SPI from Master */
 
-ISR(SPI_STC_vect)
-{
+ISR(SPI_STC_vect) {
   // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   oldsrg = SREG;
 
@@ -742,18 +673,14 @@ ISR(SPI_STC_vect)
   c = SPDR;
 
   // Serial.println(c);
-  if (c < 128 && c > 31)
-  {
+  if (c < 128 && c > 31) {
     dataRec += (char)c;
     // Serial.println(dataRec);
   }
-  if (c == 4)
-  {
-    // Serial.print("Dane otrzymane u slavea: ");
+  if (c == 4) {
     // Serial.println(dataRec);
     // Serial.println();
-    if (dataRec.length() > 0)
-    {
+    if (dataRec.length() > 0) {
       requestsHandler(dataRec);
     }
     index = 0;

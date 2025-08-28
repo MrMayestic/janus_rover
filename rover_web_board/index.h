@@ -1,4 +1,4 @@
-#include "Arduino.h"
+#include "Arduino.h" 
 const char INDEX_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html lang="en">
@@ -201,7 +201,6 @@ const char INDEX_page[] PROGMEM = R"=====(
         #video {
             width: 640px;
             height: 480px;
-            transform: rotate(180deg);
         }
 
         #onOffVideo {
@@ -257,6 +256,10 @@ const char INDEX_page[] PROGMEM = R"=====(
         }
 
         #humi {
+            float: left;
+        }
+
+        #voltage {
             float: left;
         }
 
@@ -518,6 +521,9 @@ const char INDEX_page[] PROGMEM = R"=====(
             <div class="column">
                 <p class="measure" id="humi">0%</p>
             </div>
+            <div class="column">
+                <p class="measure" id="voltage">0V</p>
+            </div>
         </div>
         <button type="button" id="sendPhoto">Send photo</button>
         <br>
@@ -584,6 +590,9 @@ const char INDEX_page[] PROGMEM = R"=====(
                         if (data.humidity > 0 && data.temperature <= 100) {
                             document.querySelector("#humi").innerHTML = `${data.humidity}%`;
                         }
+                        if (data.voltage > 0) {
+                            document.querySelector("#voltage").innerHTML = `${data.voltage / 1000}V`;
+                        }
                     }
                 })
                 .catch((err) => {
@@ -644,14 +653,17 @@ const char INDEX_page[] PROGMEM = R"=====(
 
         function startStopStream() {
             if (streamOnToggle) {
-                $("#video").attr("src", "");
+                sendData("streamStop");
+                $("#video").attr("src", '');
                 $("#onOffVideo").css("background-color", "red");
                 $("#onOffVideo").html("Off");
+                $("#video").css("visibility", "hidden");
                 streamOnToggle = false;
             } else {
                 $("#video").attr("src", `http://${server_ip}/video`);
                 $("#onOffVideo").css("background-color", "green");
                 $("#onOffVideo").html("On");
+                $("#video").css("visibility", "inherit");
                 streamOnToggle = true;
             }
         }
@@ -686,6 +698,7 @@ const char INDEX_page[] PROGMEM = R"=====(
             $("#left").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
             $("#back").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
             $("#right").on("touchend", () => precSter == 0 ? sendData(0) : console.log("null"));
+            $("#sendPhoto").on("touchend", () => sendData("sendPhoto"));
         }
 
         function defaultBinds() {
@@ -705,9 +718,8 @@ const char INDEX_page[] PROGMEM = R"=====(
             $("#normalEnergy").on("click", () => sendData("normalEnergy"));
 
             $("#moveReq").on("click", () => sendData("moveResults"));
+            $("#sendPhoto").on("click", () => sendData("sendPhoto"));
         }
-
-        $("#sendPhoto").on("click", () => sendData("sendPhoto"))
 
         sendData("joystickFalse");
 
@@ -719,7 +731,7 @@ const char INDEX_page[] PROGMEM = R"=====(
                 desktopBinds();
             }
             defaultBinds();
-            setInterval(() => sendData("data"), 10000);
+            setInterval(() => sendData("data"), 5000);
         }
 
     </script>
