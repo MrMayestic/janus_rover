@@ -1,11 +1,3 @@
-/*
-  The rover consists two different boards. The first is ESP32 that acts as web server.
-  It provides user's control of rover and can send emails, http requests, provide camera footage and etc.
-  The second board is Arduino MEGA 2560 which is mounted directly onto rover's upper plate.
-  This board handles the sensors (e.g. movement and temperature sensors) and steers the rover's wheel engines.
-  Communication is provided via an SPI interface.
-*/
-
 #include <Servo.h>
 #include <SPI.h>
 #include "dht.h"
@@ -14,6 +6,8 @@
 #define dht_apin 22
 dht DHT;
 
+#define DATAOUT 51    // MOSI
+#define DATAIN 50     // MISO
 #define SPICLOCK 52   // sck
 #define CHIPSELECT 53 // ss
 
@@ -26,6 +20,7 @@ dht DHT;
 #define IN3 9        // Right wheel reverse
 #define IN4 11       // Right wheel forward
 #define carSpeed 250 // initial speed of car >=0 to <=255
+#define LowCarSpeed 100
 
 #define ECHO_PIN A4
 #define TRIG_PIN A5
@@ -52,6 +47,8 @@ unsigned long timeToStop = -1;
 
 unsigned int ultrasonicInterval = 100;
 
+int lastControlState = 0;
+
 int currTemp = 0;
 int currHumi = 0;
 
@@ -66,6 +63,8 @@ bool xToggle = false;
 
 bool lowEnergyMode = false;
 
+volatile bool receivedone; /* use reception complete flag */
+
 String data;
 String dataRec;
 
@@ -73,12 +72,21 @@ String xValue, yValue, tValue;
 
 char buffer[32];
 
+byte clr;
+volatile byte index;
+
 uint8_t oldsrg;
 uint8_t c;
+uint8_t recived;
 
 void (*resetFunc)(void) = 0;
 
 Servo myservo;
+
+// const int RECV_PIN = 12;
+// IRrecv irrecv(RECV_PIN);
+
+/* BEGIN DEFINING FUNCTIONS */
 
 void forward()
 {
@@ -314,17 +322,17 @@ void fill_buffer(String data)
 
 void sendData(String data)
 {
-  // Serial.println(data);
   fill_buffer(data);
 
   SPI.transfer(buffer, data.length() + 1);
-  delayMicroseconds(5);
+  // delayMicroseconds(5);
   SPI.transfer((uint8_t)4);
+  // SPI.endTransaction();
 }
 
 /*Function that handles messages from Master for example: to steering*/
 
-void handleIncomingRequests(String message)
+void requestsHandler(String message)
 {
   if (message.indexOf("x") != -1)
   {
@@ -521,7 +529,7 @@ void handleIncomingRequests(String message)
 
     prevMillisSTOP = millis();
   }
-  else if (message == "/0")
+  else if (message == "/0") // USTAWIENIE PINOW NA LOW ABY WYLACZYC RUCH LAZIKA
   {
     stoper();
   }
@@ -537,10 +545,6 @@ void handleIncomingRequests(String message)
   {
     lowEnergyMode = true;
     digitalWrite(LED_BUILTIN, LOW);
-  }
-  else if (message == "alv")
-  {
-    prevMillisControl = millis();
   }
 }
 
@@ -612,10 +616,10 @@ void setup()
 
   deg = myservo.read();
 
-  pinMode(MOSI, INPUT);
+  pinMode(MISO, INPUT);
   pinMode(MISO, OUTPUT);
   pinMode(SPICLOCK, INPUT);
-  pinMode(CHIPSELECT, INPUT_PULLUP);
+  pinMode(CHIPSELECT, INPUT);
 
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -634,11 +638,14 @@ void setup()
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 
-  SPI.begin();
-  SPCR &= ~_BV(MSTR);
+  delay(50);
+
   SPCR |= _BV(SPE);
 
+  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   SPI.attachInterrupt(); /* Attach SPI interrupt */
+  index = 0;
+  receivedone = false;
 
   delay(25);
 
@@ -659,18 +666,16 @@ void loop()
     }
   }
 
-  if (millis() - prevMillisControl >= 2200)
+  if (millis() - prevMillisControl >= 4)
   {
-    // if (digitalRead(CONTROL_PIN))
-    // {
-    // }
-    // else
-    // {
-    //   stoper();
-    //   delay(500);
-    // }
-    stoper();
-    delay(500);
+    if (digitalRead(CONTROL_PIN))
+    {
+    }
+    else
+    {
+      stoper();
+      delay(500);
+    }
 
     prevMillisControl = millis();
   }
@@ -695,6 +700,8 @@ void loop()
     }
     if (changedToggle)
     {
+      // Serial.println(currTemp);
+      // Serial.println(currHumi);
       memset(buffer, 0, sizeof(buffer));
       sendData("_t" + String(currTemp) + "h" + String(currHumi) + "v" + String(getAccurateVoltage()) + "");
     }
@@ -736,10 +743,13 @@ void loop()
     if (result && !isMoving)
     {
       stoper();
+      // digitalWrite(LED_BUILTIN, HIGH);
       Serial.println("move");
       sendData("MOVE");
+      // delay(150);
       moveDetectionTimeout = 1500;
     }
+    // digitalWrite(LED_BUILTIN, LOW);
     prevMillisPIR = millis();
   }
 
@@ -778,24 +788,30 @@ int getVoltage(void)
 
 ISR(SPI_STC_vect)
 {
+  // SPI.beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   oldsrg = SREG;
 
   cli();
 
   c = SPDR;
 
+  // Serial.println(c);
   if (c < 128 && c > 31)
   {
     dataRec += (char)c;
+    // Serial.println(dataRec);
   }
   if (c == 4)
   {
+    Serial.println(dataRec);
+    Serial.println();
     if (dataRec.length() > 0)
     {
-      Serial.println(dataRec);
-      handleIncomingRequests(dataRec);
+      requestsHandler(dataRec);
     }
+    index = 0;
     dataRec = "";
   }
   SREG = oldsrg;
+  // SPI.endTransaction();
 }

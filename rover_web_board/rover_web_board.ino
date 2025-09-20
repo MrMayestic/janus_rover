@@ -1,4 +1,11 @@
-/*Libraires and files including*/
+/*
+  The rover consists two different boards. The first is ESP32 that acts as web server.
+  It provides user's control of rover and can send emails, http requests, provide camera footage and etc.
+  The second board is Arduino MEGA 2560 which is mounted directly onto rover's upper plate.
+  This board handles the sensors (e.g. movement and temperature sensors) and steers the rover's wheel engines.
+  Communication is provided via an SPI interface.
+*/
+
 #include <SPI.h>
 #include <Arduino.h>
 #include <WebServer.h>
@@ -10,6 +17,7 @@
 #include "esp_wifi.h"
 #include "esp_bt.h"
 #include "esp32-hal-cpu.h"
+#include "esp_sntp.h"
 
 #include "soc/soc.h" // disable brownout problems
 #include "soc/rtc_cntl_reg.h"
@@ -26,8 +34,7 @@
 SET_LOOP_TASK_STACK_SIZE(16384);
 
 #define CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH
-
-/*Defining pins/numbers etc.*/
+#define SILENT_MODE 1 // deifning silent mode fot mail sending client so it print less information
 
 #define PWDN_GPIO_NUM 32 // Pins definition to handle ESP32 camera
 #define RESET_GPIO_NUM -1
@@ -58,11 +65,13 @@ SET_LOOP_TASK_STACK_SIZE(16384);
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
 
+#define MAX_REC_LEN 64 // max message length
+
 // Declare the global used SMTPSession object for SMTP transport
 SMTPSession smtp;
 
 // Declare the global used Session_Config for user defined session credentials
-Session_Config config;
+Session_Config mailConfig;
 
 /*Start defining variables*/
 
@@ -72,9 +81,9 @@ char timeAll[24];
 
 unsigned int moveCounter = 0;
 
-String moveString = "";
+String moves = "";
 
-const char *ntpServer = "vega.cbk.poznan.pl"; // Set time server
+const char *ntpServer = "tempus1.gum.gov.pl";
 const long gmtOffset_sec = 0;
 const int daylightOffset_sec = 7200;
 
@@ -86,22 +95,22 @@ const int serverPort = server_port; // Server port
 
 static const int spiClk = 4000000; // Clock for SPI
 
-unsigned long lastTime = 0;
-unsigned long timerDelay = 50;
-
-unsigned long prevMillisSPI = 0;
 unsigned long prevMillisLIVECAM = 0;
-unsigned int SPIinterval = 50;
+unsigned long boardStillAliveTimeout = 0;
+
+/*
+Above timeout is security feature for keeping informed the MEGA 2560 board if ESP32 is or isn't active
+(mainly to shut engines down if esp32 restarts and rover is moving)
+*/
 
 bool canVideo = false;
 bool canLoad = false;
-bool canUpload = true;
 
 bool uploadNeeded = false;
 
 bool connected = false;
 
-bool recivedDone = false;
+bool gotMessage = false;
 
 bool joystickState = false;
 
@@ -112,10 +121,7 @@ String joystickType = "";
 String serverIP = server_ip;     // Server IP that handles data,photos etc.
 String serverPath = server_path; // Path on server
 
-String recData;
-
-String s;
-String req;
+String recivedData;
 
 String joystickPath = "http://" + String(joystick_server_ip) + "/getJoyState";
 String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
@@ -123,21 +129,168 @@ String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
 String index_html = INDEX_page;       // Load index site (HTML,CSS,JS)
 String joystick_html = JOYSTICK_page; // Load joystick site (HTML,CSS,JS)
 
-char sendBuff[32];
-
 WiFiClient live_client;
 WiFiClient client;
 WiFiServer server(serverPort);
 
-/*SPI SECTION*/
-
+SemaphoreHandle_t spiMutex;
 SPIClass *hspi = NULL;
 
-uint8_t c;
+TaskHandle_t responses;
+TaskHandle_t requests;
 
-void smtpCallback(SMTP_Status status);
+void setup()
+{
 
-// Configure camera in ESP32
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+
+  setCpuFrequencyMhz(240);
+
+  Serial.begin(115200);
+
+  Serial.println("begin");
+
+  pinMode(33, OUTPUT); // Set LED pinMode
+
+  pinMode(CONTROL_PIN_NUM, OUTPUT);
+
+  spiMutex = xSemaphoreCreateMutex();
+
+  if (!spiMutex)
+  {
+    Serial.println("Nie można utworzyć muteksu SPI");
+    while (true)
+      vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+
+  Serial.println("mutex");
+
+  hspi = new SPIClass(HSPI);
+
+  if (!SPIFFS.begin(true))
+  {
+    // Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  pinMode(HSPI_SS, OUTPUT);
+  digitalWrite(HSPI_SS, HIGH);
+
+  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
+
+  Serial.println("SPI");
+
+  wifi_config_t wifi_config = {
+      .sta = {
+          .listen_interval = 7,
+      },
+  };
+
+  send_data("/0");
+
+  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
+
+  WiFi.setAutoReconnect(true);
+
+  int wifiTries = 0;
+
+  WiFi.setSleep(false);
+
+  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
+
+  delay(100);
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    if (wifiTries == 20)
+    {
+      break;
+    }
+
+    delay(1000);
+    wifiTries++;
+  }
+
+  delay(100);
+
+  // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
+
+  if (wifiTries >= 20)
+  {
+    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(500);
+    }
+
+    wifiTries = NULL;
+  }
+
+  Serial.println(WiFi.localIP());
+  Serial.println("wifi");
+
+  mailConfig.server.host_name = SMTP_HOST;     // for outlook.com
+  mailConfig.server.port = SMTP_PORT;          // for TLS with STARTTLS or 25 (Plain/TLS with STARTTLS) or 465 (SSL)
+  mailConfig.login.email = AUTHOR_EMAIL;       // set to empty for no SMTP Authentication
+  mailConfig.login.password = AUTHOR_PASSWORD; // set to empty for no SMTP Authentication
+
+  // For client identity, assign invalid string can cause server rejection
+  mailConfig.login.user_domain = "";
+
+  smtp.debug(1);
+
+  String IP = WiFi.localIP().toString();
+
+  index_html.replace("change_this_ip", IP);
+  index_html.replace("index.html", "startPage");
+  index_html.replace("joystick.html", "joystickPage");
+
+  joystick_html.replace("change_this_ip", IP);
+  joystick_html.replace("index.html", "startPage");
+  joystick_html.replace("joystick.html", "joystickPage");
+
+  Serial.println("configNTP");
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  sntp_set_time_sync_notification_cb(timeSyncCallback);
+  sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED); // szybka aktualizacja po pierwszym razie
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
+
+  // Power saving
+  esp_bt_controller_disable(); // disable bluetooth for power saving
+
+  delay(10);
+  configCamera();
+  delay(20);
+  server.begin();
+
+  // lowEnergy();
+
+  xTaskCreatePinnedToCore(
+      handleSPIRequests, /* Task function. */
+      "requests",        /* name of task. */
+      10000,             /* Stack size of task */
+      NULL,              /* parameter of the task */
+      1,                 /* priority of the task */
+      &requests,         /* Task handle to keep track of created task */
+      1);                /* pin task to core 1 */
+
+  Serial.println("request task");
+
+  xTaskCreatePinnedToCore(
+      ResponseToClientRequests, /* Task function. */
+      "responses",              /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &responses,               /* Task handle to keep track of created task */
+      0);                       /* pin task to core 0 */
+
+  Serial.println("Setup done.");
+}
 
 void configCamera()
 {
@@ -164,7 +317,7 @@ void configCamera()
   cam_config.pixel_format = PIXFORMAT_JPEG;
 
   cam_config.frame_size = FRAMESIZE_SVGA;
-  cam_config.jpeg_quality = 4; // 0-63 lower number means higher quality
+  cam_config.jpeg_quality = 5; // 0-63 lower number means higher quality
   cam_config.fb_count = 2;
 
   esp_err_t err = esp_camera_init(&cam_config);
@@ -180,87 +333,73 @@ void configCamera()
   s->set_hmirror(s, 1);
 }
 
-/*Handler for live transmission from camera*/
-String liveS;
-void liveCam(WiFiClient &client)
-{
-
-  // capture a frame
-  camera_fb_t *fb = esp_camera_fb_get();
-
-  if (!fb)
-  {
-    Serial.println("Frame buffer could not be acquired");
-    return;
-  }
-  liveS = "--frame\n";
-  liveS += "Content-Type: image/jpeg\n\n";
-  client.print(liveS);
-  client.flush();
-  client.write(fb->buf, fb->len);
-  client.flush();
-  client.print("\n");
-  // return the frame buffer back to be reused
-  esp_camera_fb_return(fb);
-}
-
 /*Function that handles SPI Sending to Slave (rover main board)*/
 
-void send_data(String stringMess)
+void send_data(const String &stringMess)
 {
-  memset(sendBuff, 0, sizeof(sendBuff)); // Clearing send buffor to avoid messy chars
+  xSemaphoreTake(spiMutex, portMAX_DELAY);
 
-  stringMess.toCharArray(sendBuff, stringMess.length() + 1);
-
+  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   digitalWrite(HSPI_SS, LOW);
-
   delayMicroseconds(5);
 
-  for (int i = 0; i <= stringMess.length() + 1; i++)
+  // Data transfer
+  char buf[32] = {0};
+  stringMess.toCharArray(buf, sizeof(buf));
+
+  for (size_t i = 0; buf[i]; i++)
   {
-    delayMicroseconds(10);
-    hspi->transfer((uint8_t)sendBuff[i]);
+    delayMicroseconds(20);
+    hspi->transfer(buf[i]);
   }
+
   delayMicroseconds(10);
-  hspi->transfer((uint8_t)4);
+  hspi->transfer(4);
 
   digitalWrite(HSPI_SS, HIGH);
+  hspi->endTransaction();
 
-  Serial.println("sended it");
+  xSemaphoreGive(spiMutex);
 }
 
-/*Function that reads data from Slave (called from loop();)*/
+/*Function that reads data from Slave*/
 
 void read_data()
 {
+  xSemaphoreTake(spiMutex, portMAX_DELAY);
+
+  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
   digitalWrite(HSPI_SS, LOW);
-  for (int i = 0; i <= 3; i++)
+
+  recivedData = "";
+
+  for (int i = 0; i < MAX_REC_LEN; i++)
   {
-    c = hspi->transfer(NULL);
+    uint8_t byteRead = hspi->transfer(0x00);
 
-    if (c < 128 && c > 31)
+    if (byteRead == 4)
     {
-      recData += (char)c;
+      gotMessage = true;
+      break;
     }
-    // If c == 4 then it means end of message
-    if (c == 4)
+
+    if (byteRead >= 32 && byteRead < 128)
     {
-      recivedDone = true;
+      recivedData += char(byteRead);
+      Serial.print(char(byteRead));
     }
+    delayMicroseconds(25);
   }
+
   digitalWrite(HSPI_SS, HIGH);
+  hspi->endTransaction();
+
+  xSemaphoreGive(spiMutex);
 }
-
-/* HTTP request functions (for sending requests via HTTP) */
-
-/* Codes
-1 - joystick
-10 - send POST req with measured data
-*/
 
 void lowEnergy()
 {
-  digitalWrite(33, HIGH);
+  // digitalWrite(33, HIGH);
   lowEnergyMode = true;
   send_data("lowEn");
   WiFi.setSleep(true);
@@ -276,602 +415,497 @@ void normalEnergy()
   esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
 }
 
-void http_request(int whichReq)
+static void timeSyncCallback(struct timeval *tv)
 {
-  int httpResponseCode;
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    HTTPClient http;
-    Serial.println(whichReq);
-    // Your Domain name with URL path or IP address with path
-    if (whichReq == 1)
-    {
-      http.begin(joystickPath.c_str());
-
-      // Send HTTP GET request
-      httpResponseCode = http.GET();
-
-      if (httpResponseCode > 0)
-      {
-        Serial.print("HTTP joystick Response code: ");
-        Serial.println(httpResponseCode);
-
-        String payload = http.getString();
-
-        Serial.println(payload);
-
-        send_data(payload);
-      }
-    }
-    else if (whichReq == 10)
-    {
-      http.begin(sendDataPath.c_str());
-
-      http.addHeader("Content-Type", "text/plain");
-
-      String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
-      httpResponseCode = http.POST(sendIt);
-
-      if (httpResponseCode > 0)
-      {
-        Serial.print("HTTP data Response code: ");
-        Serial.println(httpResponseCode);
-      }
-      else
-      {
-        Serial.print("Error code: ");
-        Serial.println(httpResponseCode);
-      }
-      // Free resources
-      http.end();
-    }
-  }
-  else
-  {
-    Serial.println("WiFi Disconnected");
-  }
+  Serial.println("NTP: synchronized");
 }
 
-/*Function that handles http responses*/
+/* Codes
+1 - joystick
+10 - send POST req with measured data
+*/
 
-void http_resp()
+void httpDataRequest(int whichReq)
 {
-  /* check client is connected */
-  if (client.connected())
+
+  if (WiFi.status() != WL_CONNECTED)
   {
+    Serial.println("WiFi Disconnected");
+    return;
+  }
 
-    /* client send request? */
-    /* request end with '\r' -> this is HTTP protocol format */
-    String req = "";
+  HTTPClient http;
+  int httpCode = -1;
 
-    while (client.available())
+  if (whichReq == 1)
+  {
+    Serial.println("HTTP GET joystick");
+    http.begin(joystickPath.c_str());
+
+    httpCode = http.GET();
+    if (httpCode > 0)
     {
-      req += (char)client.read();
-    }
-
-    /* First line of HTTP request is "GET / HTTP/1.1"
-      here "GET /" is a request to get the first page at root "/"
-      "HTTP/1.1" is HTTP version 1.1
-    */
-    /* now we parse the request to see which page the client want */
-    int addr_start;
-
-    if (req.indexOf("OPTIONS") != -1)
-    {
-      addr_start = req.indexOf("OPTIONS") + strlen("OPTIONS");
+      Serial.printf("HTTP joystick Response code: %d\n", httpCode);
+      String payload = http.getString();
+      Serial.println(payload);
+      send_data(payload);
     }
     else
     {
-      addr_start = req.indexOf("GET") + strlen("GET");
+      Serial.printf("HTTP GET failed, code: %d\n", httpCode);
     }
 
-    int addr_end = req.indexOf("HTTP", addr_start);
+    http.end();
+    return;
+  }
 
-    if (addr_start == -1 || addr_end == -1)
+  if (whichReq == 10)
+  {
+    Serial.println("HTTP POST telemetry");
+    http.begin(sendDataPath.c_str());
+    http.addHeader("Content-Type", "application/json");
+
+    String body = String("{\"temperature\":\"") + currTemperature + String("\",\"humidity\":\"") + currHumidity + String("\",\"voltage\":\"") + currVoltage + String("\"}");
+    httpCode = http.POST(body);
+
+    if (httpCode > 0)
     {
-      return;
+      Serial.printf("HTTP data Response code: %d\n", httpCode);
+    }
+    else
+    {
+      Serial.printf("HTTP POST failed, code: %d\n", httpCode);
     }
 
-    req = req.substring(addr_start, addr_end);
-    req.trim();
+    http.end();
+    return;
+  }
 
-    if (!lowEnergyMode)
+  Serial.printf("Unknown request type: %d\n", whichReq);
+}
+
+void ResponseToClientRequests(void *parameter) // Client from WEB
+{
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  Serial.println("ReplyToClientRequests");
+  for (;;)
+  {
+    vTaskDelay(pdMS_TO_TICKS(10));
+    client = server.available();
+    if (!client)
     {
-      digitalWrite(33, HIGH);
+      vTaskDelay(pdMS_TO_TICKS(200));
+      continue; // żaden klient nie czeka -> powtórz pętlę
     }
-
-    s = "";
-
-    if (req.indexOf("joy") != -1 && req != "/joystickPage")
+    /* check client is connected */
+    if (client.connected())
     {
-      String joyBool = "";
-      int joyStart = req.indexOf("k");
 
-      for (int i = joyStart + 1; i <= req.length() - 1; i++)
+      /* client send request? */
+      /* request end with '\r' -> this is HTTP protocol format */
+      String req = "";
+
+      while (client.available())
       {
-        joyBool = joyBool + String(req[i]);
+        req += (char)client.read();
       }
 
-      // Serial.println(joyBool);
+      /* First line of HTTP request is "GET / HTTP/1.1"
+        here "GET /" is a request to get the first page at root "/"
+        "HTTP/1.1" is HTTP version 1.1
+      */
+      /* now we parse the request to see which page the client want */
+      int addr_start;
 
-      if (joyBool == "True")
+      if (req.indexOf("OPTIONS") != -1)
       {
-        joystickState = true;
-        joystickType = "phys";
-      }
-      else if (joyBool == "TrueWEB")
-      {
-        joystickState = true;
-        joystickType = "web";
+        addr_start = req.indexOf("OPTIONS") + strlen("OPTIONS");
       }
       else
       {
-        joystickState = false;
-        joystickType = "";
+        addr_start = req.indexOf("GET") + strlen("GET");
       }
-    }
-    else if (req.indexOf("Page") != -1)
-    {
-      if (req == "/startPage")
-      {
-        s = "HTTP/1.1 200 OK\n";
-        s += "Content-Type: text/html\n\n";
-        s += index_html;
-        s += "\n";
 
-        client.print(s);
+      int addr_end = req.indexOf("HTTP", addr_start);
+
+      if (addr_start == -1 || addr_end == -1)
+      {
+        continue;
       }
-      else if (req == "/joystickPage")
-      {
-        s = "HTTP/1.1 200 OK\n";
-        s += "Content-Type: text/html\n\n";
-        s += joystick_html;
-        s += "\n";
 
-        client.print(s);
+      req = req.substring(addr_start, addr_end);
+      req.trim();
+
+      Serial.print("Request: ");
+      Serial.println(req);
+
+      if (!lowEnergyMode)
+      {
+        digitalWrite(33, HIGH);
       }
-    }
-    else if (req == "/data")
-    {
-      String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
 
-      s = "HTTP/1.1 200 OK\n";
-      s += "Access-Control-Allow-Headers: *\n";
-      s += "Access-Control-Allow-Origin: *\n";
-      s += "Content-Type: application/json\n\n";
-      s += sendIt;
-      s += "\n";
+      String httpMessageToClient = "";
 
-      client.print(s);
-    }
-    /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
-    else if (req == "/")
-    { // IFs to handle requests
-      // analogWrite(FLASH_GPIO_NUM, 0);
-      s = "HTTP/1.1 200 OK\n";
-      s += "Content-Type: text/html\n\n";
-      s += index_html;
-      s += "\n";
-
-      client.print(s);
-
-      if (canLoad == true)
+      if (req.indexOf("joy") != -1 && req != "/joystickPage")
       {
-        // Serial.println("VIDEO with SLASH"); //Load video on site
+        String joyBool = "";
+        int joyStart = req.indexOf("k");
+
+        for (int i = joyStart + 1; i <= req.length() - 1; i++)
+        {
+          joyBool = joyBool + String(req[i]);
+        }
+
+        if (joyBool == "True")
+        {
+          joystickState = true;
+          joystickType = "phys";
+        }
+        else if (joyBool == "TrueWEB")
+        {
+          joystickState = true;
+          joystickType = "web";
+        }
+        else
+        {
+          joystickState = false;
+          joystickType = "";
+        }
+      }
+      else if (req.indexOf("Page") != -1)
+      {
+        if (req == "/startPage")
+        {
+          httpMessageToClient = "HTTP/1.1 200 OK\n";
+          httpMessageToClient += "Content-Type: text/html\n\n";
+          httpMessageToClient += index_html;
+          httpMessageToClient += "\n";
+
+          client.print(httpMessageToClient);
+        }
+        else if (req == "/joystickPage")
+        {
+          httpMessageToClient = "HTTP/1.1 200 OK\n";
+          httpMessageToClient += "Content-Type: text/html\n\n";
+          httpMessageToClient += joystick_html;
+          httpMessageToClient += "\n";
+
+          client.print(httpMessageToClient);
+        }
+      }
+      else if (req == "/data")
+      {
+        String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
+
+        httpMessageToClient = "HTTP/1.1 200 OK\n";
+        httpMessageToClient += "Access-Control-Allow-Headers: *\n";
+        httpMessageToClient += "Access-Control-Allow-Origin: *\n";
+        httpMessageToClient += "Content-Type: application/json\n\n";
+        httpMessageToClient += sendIt;
+        httpMessageToClient += "\n";
+
+        client.print(httpMessageToClient);
+      }
+
+      /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
+
+      else if (req == "/")
+      {
+        httpMessageToClient = "HTTP/1.1 200 OK\n";
+        httpMessageToClient += "Content-Type: text/html\n\n";
+        httpMessageToClient += index_html;
+        httpMessageToClient += "\n";
+
+        client.print(httpMessageToClient);
+
+        if (canLoad == true)
+        {
+          live_client = client;
+          live_client.print("HTTP/1.1 200 OK\n");
+          live_client.print("Access-Control-Allow-Origin: *\n");
+          live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
+          live_client.flush();
+
+          canVideo = true;
+          canLoad = false;
+        }
+        else
+        {
+          canVideo = true;
+        }
+
+        digitalWrite(CONTROL_PIN_NUM, HIGH);
+      }
+
+      else if (req == "/video")
+      {
+
         live_client = client;
+
         live_client.print("HTTP/1.1 200 OK\n");
+        live_client.print("Access-Control-Allow-Headers: *\n");
         live_client.print("Access-Control-Allow-Origin: *\n");
         live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
         live_client.flush();
 
-        canUpload = true;
-        canVideo = true;
-        canLoad = false;
+        connected = true;
+
+        if (canVideo == true)
+        {
+          // Manually (request from site after manual click by user) load of video
+        }
+        else
+        {
+          canLoad = true;
+        }
+      }
+      else if (req == "/streamStop")
+      {
+        client.stop();
+        connected = false;
+      }
+      else if (req == "/streamStart")
+      {
+        live_client.flush();
+        connected = true;
+      }
+      else if (req == "/gosleep")
+      {
+        Serial.println("Going to sleep now");
+
+        delay(500);
+
+        esp_deep_sleep_start();
+      }
+      else if (req == "/sendData")
+      {
+        send_data("sendData");
+        uploadNeeded = true;
+      }
+      else if (req == "/normalEnergy")
+      {
+        normalEnergy();
+      }
+      else if (req == "/moveResults")
+      {
+        moves = "{\"data\":\"";
+
+        for (int i = 0; i < 340; i++)
+        {
+          moves += moveTimes[i];
+        }
+
+        moves += "\"}";
+
+        httpMessageToClient = "HTTP/1.1 200 OK\n";
+        httpMessageToClient += "Access-Control-Allow-Headers: *\n";
+        httpMessageToClient += "Access-Control-Allow-Origin: *\n";
+        httpMessageToClient += "Content-Type: application/json\n\n";
+        httpMessageToClient += moves;
+        httpMessageToClient += "\n";
+
+        client.print(httpMessageToClient);
+
+        delay(100);
+
+        moves = "";
       }
       else
       {
-        canVideo = true;
+        if (req != "/favicon.ico")
+        {
+          send_data(req);
+        }
       }
-
-      digitalWrite(CONTROL_PIN_NUM, HIGH);
     }
-
-    else if (req == "/video")
+    if (!lowEnergyMode)
     {
-
-      live_client = client;
-
-      live_client.print("HTTP/1.1 200 OK\n");
-      live_client.print("Access-Control-Allow-Headers: *\n");
-      live_client.print("Access-Control-Allow-Origin: *\n");
-      live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-      live_client.flush();
-
-      canUpload = true;
-      connected = true;
-
-      if (canVideo == true)
-      {
-        // Manually (request from site after manual click by user) load of video
-      }
-      else
-      {
-        canLoad = true;
-      }
+      digitalWrite(33, LOW);
     }
-    else if (req == "/streamStop")
-    { // Stream off
-      // analogWrite(FLASH_GPIO_NUM, 0);
+  }
+}
+
+void sendMailWithPhotos()
+{
+  memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
+
+  SMTP_Message message;
+
+  for (int i = 0; i <= 1; i++)
+  {
+    SMTP_Attachment att;
+
+    bool wasConnected = connected;
+
+    if (!connected)
+    {
       client.stop();
       connected = false;
     }
-    else if (req == "/streamStart")
-    { // Stream on
-      // analogWrite(FLASH_GPIO_NUM, 100);
-      live_client.flush();
-      connected = true;
-    }
-    else if (req == "/gosleep")
-    {
-      Serial.println("Going to sleep now");
+    vTaskDelay(pdMS_TO_TICKS(50));
 
-      delay(500);
+    camera_fb_t *photo = esp_camera_fb_get();
 
-      esp_deep_sleep_start();
-    }
-    else if (req == "/sendData")
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo))
     {
-      send_data("sendData");
-      uploadNeeded = true;
-    }
-    else if (req == "/sendPhoto")
-    {
-      // sendPhoto();
-    }
-    else if (req == "/lowEnergy")
-    {
-      lowEnergy();
-    }
-    else if (req == "/normalEnergy")
-    {
-      normalEnergy();
-    }
-    else if (req == "/moveResults")
-    {
-      moveString = "{\"data\":\"";
+      Serial.println("Failed to obtain time");
+      moveTimes[moveCounter] = String("Failed") + String("|");
+      moveCounter++;
 
-      for (int i = 0; i < 340; i++)
+      if (moveCounter >= 340)
       {
-        moveString += moveTimes[i];
-      }
-
-      moveString += "\"}";
-      // Serial.println(moveString);
-
-      s = "HTTP/1.1 200 OK\n";
-      s += "Access-Control-Allow-Headers: *\n";
-      s += "Access-Control-Allow-Origin: *\n";
-      s += "Content-Type: application/json\n\n";
-      s += moveString;
-      s += "\n";
-
-      client.print(s);
-
-      delay(100);
-
-      moveString = "";
-    }
-    else
-    {
-      if (req != "/favicon.ico")
-      {
-        send_data(req);
+        moveCounter = 0;
       }
     }
+    else if (i == 0)
+    {
+      strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
+      moveTimes[moveCounter] = String(timeAll) + String("|");
+      moveCounter++;
+
+      if (moveCounter >= 340)
+      {
+        moveCounter = 0;
+      }
+    }
+
+    if (photo)
+    {
+      uint8_t *photoBuf = photo->buf;
+
+      // Set the attatchment info
+
+      att.descr.filename = String(timeAll) + ".jpg";
+      att.descr.mime = "image/jpeg";
+      att.blob.data = photoBuf;
+      att.blob.size = photo->len;
+      // Set the transfer encoding to base64
+      att.descr.transfer_encoding = Content_Transfer_Encoding::enc_base64;
+      // // We set the content encoding to match the above greenImage data
+      // att.descr.content_encoding = Content_Transfer_Encoding::enc_base64;
+
+      // Add attachment to the message
+      message.addAttachment(att);
+
+      esp_camera_fb_return(photo);
+
+      vTaskDelay(pdMS_TO_TICKS(25));
+
+      if (wasConnected)
+      {
+        live_client.flush();
+        connected = true;
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(900));
   }
-  if (!lowEnergyMode)
+
+  message.sender.name = "Janus_rover";
+  message.sender.email = RECIPIENT_EMAIL;
+  message.subject = "Move " + String(timeAll);
+  message.addRecipient("name1", RECIPIENT_EMAIL);
+
+  message.text.content = String(timeAll);
+
+  smtp.connect(&mailConfig);
+
+  if (!MailClient.sendMail(&smtp, &message))
+    Serial.println("Error sending Email, " + smtp.errorReason());
+}
+
+void sendAirAndVoltageData(String recivedData)
+{
+  int tempStartingIndex = recivedData.indexOf("t");
+  int humidityStartingIndex = recivedData.indexOf("h");
+  int voltageStartingIndex = recivedData.indexOf("v");
+  String temperature = recivedData.substring(tempStartingIndex + 1, humidityStartingIndex);
+  String humidity = recivedData.substring(humidityStartingIndex + 1, voltageStartingIndex);
+  String voltage_read = recivedData.substring(voltageStartingIndex + 1, recivedData.length());
+
+  recivedData = "";
+
+  if (temperature.toInt() > 0 && temperature.toInt() < 50)
   {
-    digitalWrite(33, LOW);
+    currTemperature = temperature.toInt();
+  }
+  if (humidity.toInt() > 0 && humidity.toInt() <= 100)
+  {
+    currHumidity = humidity.toInt();
+  }
+  if (voltage_read.toInt() > 0)
+  {
+    currVoltage = voltage_read.toInt();
+  }
+
+  if (uploadNeeded)
+  {
+    httpDataRequest(10);
+    uploadNeeded = false;
   }
 }
 
-/*Setup function*/
-
-void setup()
+void handleSPIRequests(void *parameter) // requests from second board, MEGA 2560
 {
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  Serial.println("handleSPIRequests");
 
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
-
-  setCpuFrequencyMhz(240);
-
-  Serial.begin(115200);
-
-  pinMode(33, OUTPUT); // Set LED pinMode
-
-  pinMode(CONTROL_PIN_NUM, OUTPUT);
-  // pinMode(FLASH_GPIO_NUM, OUTPUT);
-
-  // analogWrite(FLASH_GPIO_NUM, 0);
-
-  hspi = new SPIClass(HSPI);
-
-  if (!SPIFFS.begin(true))
+  for (;;)
   {
-    // Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  pinMode(HSPI_SS, OUTPUT);
-  delay(1);
-
-  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-  digitalWrite(HSPI_SS, LOW);
-
-  wifi_config_t wifi_config = {
-      .sta = {
-          .listen_interval = 7,
-      },
-  };
-
-  delay(450);
-
-  send_data("/0");
-
-  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
-
-  int wifiTries = 0;
-
-  WiFi.setSleep(false);
-
-  // Trying to connect primary WiFi
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    if (wifiTries == 20)
-    {
-      break;
-    }
-
-    delay(500);
-    wifiTries++;
-  }
-
-  // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
-
-  if (wifiTries >= 20)
-  {
-    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve);
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-    }
-
-    wifiTries = NULL;
-  }
-
-  config.server.host_name = SMTP_HOST;     // for outlook.com
-  config.server.port = SMTP_PORT;          // for TLS with STARTTLS or 25 (Plain/TLS with STARTTLS) or 465 (SSL)
-  config.login.email = AUTHOR_EMAIL;       // set to empty for no SMTP Authentication
-  config.login.password = AUTHOR_PASSWORD; // set to empty for no SMTP Authentication
-
-  // For client identity, assign invalid string can cause server rejection
-  config.login.user_domain = "";
-
-  /*
-   Set the NTP config time
-   For times east of the Prime Meridian use 0-12
-   For times west of the Prime Meridian add 12 to the offset.
-   Ex. American/Denver GMT would be -6. 6 + 12 = 18
-   See https://en.wikipedia.org/wiki/Time_zone for a list of the GMT/UTC timezone offsets
-   */
-  // config.time.ntp_server = "pl.pool.ntp.org";
-  // config.time.gmt_offset = 1;
-  // config.time.day_light_offset = 0;
-
-  // Set debug option
-  smtp.debug(1);
-
-  // Set the callback function to get the sending results
-  smtp.callback(smtpCallback);
-
-  // Connect to the server
-  // smtp.connect(&config);
-
-  String IP = WiFi.localIP().toString();
-
-  index_html.replace("change_this_ip", IP);
-  index_html.replace("index.html", "startPage");
-  index_html.replace("joystick.html", "joystickPage");
-
-  joystick_html.replace("change_this_ip", IP);
-  joystick_html.replace("index.html", "startPage");
-  joystick_html.replace("joystick.html", "joystickPage");
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Time set
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
-
-  // Power saving
-  esp_bt_controller_disable();
-
-  delay(10);
-  configCamera();
-  delay(20);
-  server.begin();
-
-  lowEnergy();
-}
-
-/*Loop function*/
-
-void loop()
-{
-  client = server.available();
-
-  if (((millis() - lastTime) > timerDelay) && joystickState)
-  {
-    if (joystickType != "web")
-    {
-      http_request(1);
-    }
-
-    lastTime = millis();
-  }
-
-  if (millis() - prevMillisSPI >= 1)
-  {
-
+    vTaskDelay(pdMS_TO_TICKS(8));
     read_data();
 
-    if (recivedDone == true)
+    if (gotMessage == true)
     {
+      String copyOfData = recivedData; // In case of recData = "" while operating on that string
 
-      String copyOfRecData = recData; // In case of recData = "" while operating on that string
-
-      if (copyOfRecData == "MOVE")
+      if (copyOfData == "MOVE")
       {
-
-        // int wasConnected = connected;
-        memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
-
-        if (true)
-        { //(!connected) {
-
-          SMTP_Message message;
-
-          for (int i = 0; i <= 1; i++)
-          {
-            SMTP_Attachment att;
-
-            // analogWrite(FLASH_GPIO_NUM, 200);
-
-            camera_fb_t *fb = esp_camera_fb_get();
-
-            // Serial.write(fb->buf, fb->len);
-
-            delay(10);
-
-            // analogWrite(FLASH_GPIO_NUM, 0);
-
-            struct tm timeinfo;
-
-            if (!getLocalTime(&timeinfo))
-            {
-              Serial.println("Failed to obtain time");
-              delay(1000);
-
-              if (!getLocalTime(&timeinfo))
-              {
-                Serial.println("Failed to obtain time (second)");
-                moveTimes[moveCounter] = String("Failed") + String("|");
-                moveCounter++;
-                if (moveCounter >= 340)
-                {
-                  moveCounter = 0;
-                }
-              }
-              else if (i == 0)
-              {
-                strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
-                moveTimes[moveCounter] = String(timeAll) + String("|");
-                moveCounter++;
-                if (moveCounter >= 340)
-                {
-                  moveCounter = 0;
-                }
-              }
-            }
-            else if (i == 0)
-            {
-              strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
-              moveTimes[moveCounter] = String(timeAll) + String("|");
-              moveCounter++;
-              if (moveCounter >= 340)
-              {
-                moveCounter = 0;
-              }
-            }
-
-            if (fb)
-            {
-              uint8_t *fbBuf = fb->buf;
-
-              // Set the attatchment info
-
-              att.descr.filename = String(timeAll) + ".jpg";
-              att.descr.mime = "image/jpeg";
-              att.blob.data = fbBuf;
-              att.blob.size = fb->len;
-              // Set the transfer encoding to base64
-              att.descr.transfer_encoding = Content_Transfer_Encoding::enc_base64;
-              // // We set the content encoding to match the above greenImage data
-              // att.descr.content_encoding = Content_Transfer_Encoding::enc_base64;
-
-              // Add attachment to the message
-              message.addAttachment(att);
-
-              esp_camera_fb_return(fb);
-            }
-
-            delay(1000);
-          }
-
-          // digitalWrite(FLASH_GPIO_NUM, LOW);
-
-          // Set the message headers
-          message.sender.name = "Janus_rover";
-          message.sender.email = RECIPIENT_EMAIL;
-          message.subject = "Move " + String(timeAll);
-          message.addRecipient("name1", RECIPIENT_EMAIL);
-
-          // Set the message content
-          message.text.content = String(timeAll);
-
-          smtp.connect(&config);
-
-          // Start sending Email and close the session
-          if (!MailClient.sendMail(&smtp, &message))
-            Serial.println("Error sending Email, " + smtp.errorReason());
-        }
+        sendMailWithPhotos();
       }
       else
       {
-        int t_start = copyOfRecData.indexOf("t");
-        int h_start = copyOfRecData.indexOf("h");
-        int v_start = copyOfRecData.indexOf("v");
-        String temperature = copyOfRecData.substring(t_start + 1, h_start);
-        String humidity = copyOfRecData.substring(h_start + 1, v_start);
-        String voltage_read = copyOfRecData.substring(v_start + 1, copyOfRecData.length());
-
-        recData = "";
-        if (temperature.toInt() > 0 && temperature.toInt() < 50)
-        {
-          currTemperature = temperature.toInt();
-        }
-        if (humidity.toInt() > 0 && humidity.toInt() <= 100)
-        {
-          currHumidity = humidity.toInt();
-        }
-        if (voltage_read.toInt() > 0)
-        {
-          currVoltage = voltage_read.toInt();
-        }
-
-        if (uploadNeeded)
-        {
-          http_request(10);
-          uploadNeeded = false;
-        }
+        sendAirAndVoltageData(copyOfData);
       }
-      recivedDone = false;
-      recData = "";
+
+      gotMessage = false;
+      recivedData = "";
     }
-    prevMillisSPI = millis();
+  }
+}
+
+void liveCam(WiFiClient &client)
+{
+
+  camera_fb_t *fb = esp_camera_fb_get();
+
+  if (!fb)
+  {
+    Serial.println("Frame buffer could not be acquired");
+    return;
+  }
+  String liveS = "--frame\n";
+  liveS += "Content-Type: image/jpeg\n\n";
+  client.print(liveS);
+  client.flush();
+  client.write(fb->buf, fb->len);
+  client.flush();
+  client.print("\n");
+  // return the frame buffer back to be reused
+  esp_camera_fb_return(fb);
+}
+
+void loop()
+{
+  vTaskDelay(pdMS_TO_TICKS(2));
+
+  if (millis() - boardStillAliveTimeout >= 700)
+  {
+    send_data("alv"); //alv so it is shorter and less time per sending
+    boardStillAliveTimeout = millis();
   }
 
-  http_resp();
   if (connected == true)
   {
     if (millis() - prevMillisLIVECAM >= 25)
@@ -881,106 +915,3 @@ void loop()
     }
   }
 }
-
-void smtpCallback(SMTP_Status status)
-{
-
-  // Serial.println(status.info());
-
-  if (status.success())
-  {
-    // See example for how to get the sending result
-  }
-}
-
-// Function to send photo from camera to server
-
-// String sendPhoto() {
-//   String getAll;
-//   String getBody;
-
-//   camera_fb_t *fb = NULL;
-//   fb = esp_camera_fb_get();  // Getting image
-
-//   if (!fb) {
-//     Serial.println("Error while getting image");
-//     delay(1000);
-//     ESP.restart();
-//   }
-
-//   // Serial.println("Connecting to server: " + serverIP);
-
-//   if (live_client.connect(serverIP.c_str(), 3000)) {
-
-//     struct tm timeinfo;
-
-//     if (!getLocalTime(&timeinfo)) {
-//       Serial.println("Failed to obtain time");
-//     }
-//     strftime(timeAll, 20, "%m%d_%H%M%S", &timeinfo);  // Load time
-
-//     uint32_t imageLen = fb->len;
-//     uint32_t totalLen = imageLen;
-
-//     Serial.println("Starting request");
-
-//     live_client.println("POST " + serverPath + " HTTP/1.1");
-//     live_client.println("Host: " + serverIP + ":3000");
-//     live_client.println("Connection: keep-alive");
-//     live_client.println("Content-Length: " + String(imageLen));
-//     live_client.println("Content-Type: application/octet-stream");  // Creating first headers in HTTP request
-//     live_client.println();
-
-//     Serial.println("Starting sending photo");
-
-//     uint8_t *fbBuf = fb->buf;
-
-//     size_t fbLen = fb->len;
-
-//     for (size_t n = 0; n < fbLen; n = n + 1024) {  // Start sending image
-//       if (n + 1024 < fbLen) {
-//         live_client.write(fbBuf, 1024);
-//         fbBuf += 1024;
-//       } else if (fbLen % 1024 > 0) {
-//         size_t remainder = fbLen % 1024;
-//         live_client.write(fbBuf, remainder);
-//       }
-//     }
-
-//     esp_camera_fb_return(fb);
-
-//     int timoutTimer = 10000;
-//     long startTimer = millis();
-
-//     boolean state = false;
-
-//     while ((startTimer + timoutTimer) > millis()) {
-//       delay(50);
-//       while (live_client.available()) {
-//         char c = live_client.read();
-
-//         if (c == '\n') {
-//           if (getAll.length() == 0) {
-//             state = true;
-//           }
-//           getAll = "";
-//         } else if (c != '\r') {
-//           getAll += String(c);
-//         }
-
-//         if (state == true) {
-//           getBody += String(c);
-//         }
-//         startTimer = millis();
-//       }
-
-//       if (getBody.length() > 0) {
-//         break;
-//       }
-//     }
-//   } else {
-//     getBody = "Connection to " + serverIP + " failed.";
-//   }
-
-//   return getBody;
-// }
