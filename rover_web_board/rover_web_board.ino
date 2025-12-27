@@ -182,21 +182,19 @@ void setup()
 
   wifi_config_t wifi_config = {
       .sta = {
-          .listen_interval = 7,
+          .listen_interval = 3,
       },
   };
 
   send_data("/0");
 
   WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
-
+  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
   WiFi.setAutoReconnect(true);
 
   int wifiTries = 0;
 
   WiFi.setSleep(false);
-
-  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
 
   delay(100);
 
@@ -210,8 +208,6 @@ void setup()
     delay(1000);
     wifiTries++;
   }
-
-  delay(100);
 
   // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
 
@@ -229,6 +225,15 @@ void setup()
 
   Serial.println(WiFi.localIP());
   Serial.println("wifi");
+  Serial.println(WiFi.status());
+
+  delay(100);
+
+  WiFi.disconnect();
+
+  delay(200);
+
+  WiFi.reconnect();
 
   mailConfig.server.host_name = SMTP_HOST;     // for outlook.com
   mailConfig.server.port = SMTP_PORT;          // for TLS with STARTTLS or 25 (Plain/TLS with STARTTLS) or 465 (SSL)
@@ -250,16 +255,15 @@ void setup()
   joystick_html.replace("index.html", "startPage");
   joystick_html.replace("joystick.html", "joystickPage");
 
-  Serial.println("configNTP");
-
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   sntp_set_time_sync_notification_cb(timeSyncCallback);
   sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED); // szybka aktualizacja po pierwszym razie
 
+  Serial.println("configNTP");
+
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
 
-  // Power saving
   esp_bt_controller_disable(); // disable bluetooth for power saving
 
   delay(10);
@@ -349,7 +353,7 @@ void send_data(const String &stringMess)
 
   for (size_t i = 0; buf[i]; i++)
   {
-    delayMicroseconds(20);
+    delayMicroseconds(25);
     hspi->transfer(buf[i]);
   }
 
@@ -379,6 +383,7 @@ void read_data()
 
     if (byteRead == 4)
     {
+      // Serial.println("");
       gotMessage = true;
       break;
     }
@@ -386,7 +391,7 @@ void read_data()
     if (byteRead >= 32 && byteRead < 128)
     {
       recivedData += char(byteRead);
-      Serial.print(char(byteRead));
+      // Serial.print(char(byteRead));
     }
     delayMicroseconds(25);
   }
@@ -402,7 +407,7 @@ void lowEnergy()
   // digitalWrite(33, HIGH);
   lowEnergyMode = true;
   send_data("lowEn");
-  WiFi.setSleep(true);
+  // WiFi.setSleep(true);
   esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_MAX_MODEM);
 }
 
@@ -411,7 +416,7 @@ void normalEnergy()
   digitalWrite(33, LOW);
   lowEnergyMode = false;
   send_data("norEn");
-  WiFi.setSleep(false);
+  // WiFi.setSleep(false);
   esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
 }
 
@@ -853,7 +858,7 @@ void handleSPIRequests(void *parameter) // requests from second board, MEGA 2560
 
   for (;;)
   {
-    vTaskDelay(pdMS_TO_TICKS(8));
+    vTaskDelay(pdMS_TO_TICKS(25));
     read_data();
 
     if (gotMessage == true)
@@ -898,11 +903,11 @@ void liveCam(WiFiClient &client)
 
 void loop()
 {
-  vTaskDelay(pdMS_TO_TICKS(2));
+  vTaskDelay(pdMS_TO_TICKS(5));
 
   if (millis() - boardStillAliveTimeout >= 700)
   {
-    send_data("alv"); //alv so it is shorter and less time per sending
+    send_data("alv"); // alv so it is shorter and less time per sending
     boardStillAliveTimeout = millis();
   }
 
