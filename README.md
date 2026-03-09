@@ -42,7 +42,7 @@ Rover can:
 
 ## Overview
 
-Rover is using Ardunio MEGA 2560 borad and ESP32-cam with ESP32-S dual-core CPU. It is build on ELEGOO chasis with added sensors. ESP32 board's code needs additional wifi_config.h file with Wi-Fi and email credentials. Rover is powered by two Li-Ion 18650 3.7V batteries.
+Rover is using Ardunio MEGA 2560 board and ESP32-cam with ESP32-S dual-core CPU. It is build on ELEGOO chasis with added sensors. ESP32 board's code needs additional wifi_config.h file with Wi-Fi and email credentials. Rover is powered by two Li-Ion 18650 3.7V batteries.
 
 <!-- LICENSE -->
 
