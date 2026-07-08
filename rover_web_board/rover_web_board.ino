@@ -6,42 +6,41 @@
   Communication is provided via an SPI interface.
 */
 
-#include <SPI.h>
+// ── Core Arduino / ESP-IDF libraries ──────────────────────────
 #include <Arduino.h>
+#include <array>
+#include <string.h>
+#include <SPI.h>
+#include <WiFi.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
-#include <string.h>
-#include <WiFi.h>
-
+#include <SPIFFS.h>
+#include <ESP_Mail_Client.h>
 #include "esp_camera.h"
+#include "ESP32_OV5640_AF.h"
 #include "esp_wifi.h"
 #include "esp_bt.h"
 #include "esp32-hal-cpu.h"
 #include "esp_sntp.h"
-
 #include "soc/soc.h" // disable brownout problems
 #include "soc/rtc_cntl_reg.h"
 
-#include "index.h"
-#include "joystick.h"
+// ── External content ──────────────────────────
+#include "wifi_config.h"               //WiFi/mail secrets (gitignored)
+#include "src/site_sources/index.h"    //main WWW site
+#include "src/site_sources/joystick.h" //joystick steering WWW site
 
-#include "wifi_config.h"
-
-#include "SPIFFS.h"
-
-#include <ESP_Mail_Client.h>
-
+// ── Build / library config ────────────────────────────────────
 SET_LOOP_TASK_STACK_SIZE(16384);
-
 #define CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH
 #define SILENT_MODE 1 // deifning silent mode fot mail sending client so it print less information
 
-#define PWDN_GPIO_NUM 32 // Pins definition to handle ESP32 camera
+// ── Camera pins (AI-Thinker ESP32-CAM) ─────────────────────────
+#define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
 #define SIOD_GPIO_NUM 26
 #define SIOC_GPIO_NUM 27
-
 #define Y9_GPIO_NUM 35
 #define Y8_GPIO_NUM 34
 #define Y7_GPIO_NUM 39
@@ -54,247 +53,89 @@ SET_LOOP_TASK_STACK_SIZE(16384);
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
 
+// ── SPI pins (communication with MEGA 2560) ─────────────────────────
 #define HSPI_MISO 12
 #define HSPI_MOSI 13
 #define HSPI_SCLK 14
 #define HSPI_SS 15
 
+// ── Other pins ─────────────────────────
 #define CONTROL_PIN_NUM 2
-#define FLASH_GPIO_NUM 4
 
+// ── SMTP config ─────────────────────────
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
 
-#define MAX_REC_LEN 64 // max message length
+// ── Global consts for capacity/protocols ─────────────────────────
+#define MAX_REC_LEN 64            // max message length
+#define MOVE_ENTRIES_CAPACITY 300 // max move entries stored
 
-// Declare the global used SMTPSession object for SMTP transport
+// ── Mail ─────────────────────────
 SMTPSession smtp;
-
-// Declare the global used Session_Config for user defined session credentials
 Session_Config mailConfig;
 
-/*Start defining variables*/
-
-String moveTimes[342];
-
-char timeAll[24];
-
-unsigned int moveCounter = 0;
-
-String moves = "";
-
+// ── NTP config ─────────────────────────
 const char *ntpServer = "tempus1.gum.gov.pl";
 const long gmtOffset_sec = 0;
 const int daylightOffset_sec = 7200;
+
+// ── Telemetry ─────────────────────────
+// struct SensorData
+// {
+//   unsigned int currTemperature = 0;
+//   unsigned int currHumidity = 0;
+//   unsigned int currVoltage = 0;
+// };
+
+// SensorData currentSensorData{};
 
 unsigned int currTemperature = 0;
 unsigned int currHumidity = 0;
 unsigned int currVoltage = 0;
 
-const int serverPort = server_port; // Server port
-
-static const int spiClk = 4000000; // Clock for SPI
-
-unsigned long prevMillisLIVECAM = 0;
-unsigned long boardStillAliveTimeout = 0;
-
-/*
-Above timeout is security feature for keeping informed the MEGA 2560 board if ESP32 is or isn't active
-(mainly to shut engines down if esp32 restarts and rover is moving)
-*/
-
-bool canVideo = false;
-bool canLoad = false;
-
-bool uploadNeeded = false;
-
-bool connected = false;
-
-bool gotMessage = false;
-
-bool joystickState = false;
-
-bool lowEnergyMode = false;
-
-String joystickType = "";
-
+// ── Web config ─────────────────────────
+const int serverPort = server_port;
 String serverIP = server_ip;     // Server IP that handles data,photos etc.
 String serverPath = server_path; // Path on server
-
-String recivedData;
-
 String joystickPath = "http://" + String(joystick_server_ip) + "/getJoyState";
 String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
-
-String index_html = INDEX_page;       // Load index site (HTML,CSS,JS)
-String joystick_html = JOYSTICK_page; // Load joystick site (HTML,CSS,JS)
-
 WiFiClient live_client;
 WiFiClient client;
 WiFiServer server(serverPort);
 
+// ── Global flags ─────────────────────────
+bool uploadNeeded = false;
+bool connected = false;
+bool gotMessage = false;
+bool lowEnergyMode = false;
+
+// ── SPI link ─────────────────────────
 SemaphoreHandle_t spiMutex;
 SPIClass *hspi = NULL;
+String recivedData;
 
+// ── WWW sites codes ─────────────────────────
+String index_html = INDEX_page;
+String joystick_html = JOYSTICK_page;
+
+// ── Timings/watchdogd ─────────────────────────
+unsigned long prevMillisLIVECAM = 0;
+unsigned long boardStillAliveTimeout = 0;
+
+// ── FreeRTOS task handlers ─────────────────────────
 TaskHandle_t responses;
 TaskHandle_t requests;
 
-void setup()
-{
+// ── Internal modules (are using extern variables from this file) ─────────────────────────
+#include "src/spi/spi_comm.h"
+#include "src/web/web_handlers.h"
+#include "src/http/http_requests.h"
+#include "src/move_log/move_entry.h"
+#include "src/move_log/move_log.h"
 
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
-
-  setCpuFrequencyMhz(240);
-
-  Serial.begin(115200);
-
-  Serial.println("begin");
-
-  pinMode(33, OUTPUT); // Set LED pinMode
-
-  pinMode(CONTROL_PIN_NUM, OUTPUT);
-
-  spiMutex = xSemaphoreCreateMutex();
-
-  if (!spiMutex)
-  {
-    Serial.println("Nie można utworzyć muteksu SPI");
-    while (true)
-      vTaskDelay(pdMS_TO_TICKS(1000));
-  }
-
-  Serial.println("mutex");
-
-  hspi = new SPIClass(HSPI);
-
-  if (!SPIFFS.begin(true))
-  {
-    // Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  pinMode(HSPI_SS, OUTPUT);
-  digitalWrite(HSPI_SS, HIGH);
-
-  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
-
-  Serial.println("SPI");
-
-  wifi_config_t wifi_config = {
-      .sta = {
-          .listen_interval = 3,
-      },
-  };
-
-  send_data("/0");
-
-  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
-  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
-  WiFi.setAutoReconnect(true);
-
-  int wifiTries = 0;
-
-  WiFi.setSleep(false);
-
-  delay(100);
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    if (wifiTries == 20)
-    {
-      break;
-    }
-
-    delay(1000);
-    wifiTries++;
-  }
-
-  // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
-
-  if (wifiTries >= 20)
-  {
-    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve);
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-    }
-
-    wifiTries = NULL;
-  }
-
-  Serial.println(WiFi.localIP());
-  Serial.println("wifi");
-  Serial.println(WiFi.status());
-
-  delay(100);
-
-  WiFi.disconnect();
-
-  delay(200);
-
-  WiFi.reconnect();
-
-  mailConfig.server.host_name = SMTP_HOST;     // for outlook.com
-  mailConfig.server.port = SMTP_PORT;          // for TLS with STARTTLS or 25 (Plain/TLS with STARTTLS) or 465 (SSL)
-  mailConfig.login.email = AUTHOR_EMAIL;       // set to empty for no SMTP Authentication
-  mailConfig.login.password = AUTHOR_PASSWORD; // set to empty for no SMTP Authentication
-
-  // For client identity, assign invalid string can cause server rejection
-  mailConfig.login.user_domain = "";
-
-  smtp.debug(1);
-
-  String IP = WiFi.localIP().toString();
-
-  index_html.replace("change_this_ip", IP);
-  index_html.replace("index.html", "startPage");
-  index_html.replace("joystick.html", "joystickPage");
-
-  joystick_html.replace("change_this_ip", IP);
-  joystick_html.replace("index.html", "startPage");
-  joystick_html.replace("joystick.html", "joystickPage");
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  sntp_set_time_sync_notification_cb(timeSyncCallback);
-  sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED); // szybka aktualizacja po pierwszym razie
-
-  Serial.println("configNTP");
-
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
-
-  esp_bt_controller_disable(); // disable bluetooth for power saving
-
-  delay(10);
-  configCamera();
-  delay(20);
-  server.begin();
-
-  // lowEnergy();
-
-  xTaskCreatePinnedToCore(
-      handleSPIRequests, /* Task function. */
-      "requests",        /* name of task. */
-      10000,             /* Stack size of task */
-      NULL,              /* parameter of the task */
-      1,                 /* priority of the task */
-      &requests,         /* Task handle to keep track of created task */
-      1);                /* pin task to core 1 */
-
-  Serial.println("request task");
-
-  xTaskCreatePinnedToCore(
-      ResponseToClientRequests, /* Task function. */
-      "responses",              /* name of task. */
-      10000,                    /* Stack size of task */
-      NULL,                     /* parameter of the task */
-      1,                        /* priority of the task */
-      &responses,               /* Task handle to keep track of created task */
-      0);                       /* pin task to core 0 */
-
-  Serial.println("Setup done.");
-}
+// ── Move log ─────────────────────────
+MoveLog moveLog;
+char timeAll[24]; // last formatted timestamp
 
 void configCamera()
 {
@@ -317,11 +158,11 @@ void configCamera()
   cam_config.pin_sscb_scl = SIOC_GPIO_NUM;
   cam_config.pin_pwdn = PWDN_GPIO_NUM;
   cam_config.pin_reset = RESET_GPIO_NUM;
-  cam_config.xclk_freq_hz = 20000000;
+  cam_config.xclk_freq_hz = 16000000;
   cam_config.pixel_format = PIXFORMAT_JPEG;
 
-  cam_config.frame_size = FRAMESIZE_SVGA;
-  cam_config.jpeg_quality = 5; // 0-63 lower number means higher quality
+  cam_config.frame_size = FRAMESIZE_HD;
+  cam_config.jpeg_quality = 12; // 0-63 lower number means higher quality
   cam_config.fb_count = 2;
 
   esp_err_t err = esp_camera_init(&cam_config);
@@ -333,73 +174,14 @@ void configCamera()
   }
 
   sensor_t *s = esp_camera_sensor_get();
-  s->set_vflip(s, 1);
-  s->set_hmirror(s, 1);
-}
-
-/*Function that handles SPI Sending to Slave (rover main board)*/
-
-void send_data(const String &stringMess)
-{
-  xSemaphoreTake(spiMutex, portMAX_DELAY);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-  digitalWrite(HSPI_SS, LOW);
-  delayMicroseconds(5);
-
-  // Data transfer
-  char buf[32] = {0};
-  stringMess.toCharArray(buf, sizeof(buf));
-
-  for (size_t i = 0; buf[i]; i++)
+  // s->set_vflip(s, 1);
+  s->set_brightness(s, -1);
+  if (s->id.PID == OV3660_PID)
   {
-    delayMicroseconds(25);
-    hspi->transfer(buf[i]);
+
+    s->set_brightness(s, 1);
+    s->set_saturation(s, -1);
   }
-
-  delayMicroseconds(10);
-  hspi->transfer(4);
-
-  digitalWrite(HSPI_SS, HIGH);
-  hspi->endTransaction();
-
-  xSemaphoreGive(spiMutex);
-}
-
-/*Function that reads data from Slave*/
-
-void read_data()
-{
-  xSemaphoreTake(spiMutex, portMAX_DELAY);
-
-  hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-  digitalWrite(HSPI_SS, LOW);
-
-  recivedData = "";
-
-  for (int i = 0; i < MAX_REC_LEN; i++)
-  {
-    uint8_t byteRead = hspi->transfer(0x00);
-
-    if (byteRead == 4)
-    {
-      // Serial.println("");
-      gotMessage = true;
-      break;
-    }
-
-    if (byteRead >= 32 && byteRead < 128)
-    {
-      recivedData += char(byteRead);
-      // Serial.print(char(byteRead));
-    }
-    delayMicroseconds(25);
-  }
-
-  digitalWrite(HSPI_SS, HIGH);
-  hspi->endTransaction();
-
-  xSemaphoreGive(spiMutex);
 }
 
 void lowEnergy()
@@ -420,318 +202,13 @@ void normalEnergy()
   esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
 }
 
-static void timeSyncCallback(struct timeval *tv)
-{
-  Serial.println("NTP: synchronized");
-}
-
-/* Codes
-1 - joystick
-10 - send POST req with measured data
-*/
-
-void httpDataRequest(int whichReq)
-{
-
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.println("WiFi Disconnected");
-    return;
-  }
-
-  HTTPClient http;
-  int httpCode = -1;
-
-  if (whichReq == 1)
-  {
-    Serial.println("HTTP GET joystick");
-    http.begin(joystickPath.c_str());
-
-    httpCode = http.GET();
-    if (httpCode > 0)
-    {
-      Serial.printf("HTTP joystick Response code: %d\n", httpCode);
-      String payload = http.getString();
-      Serial.println(payload);
-      send_data(payload);
-    }
-    else
-    {
-      Serial.printf("HTTP GET failed, code: %d\n", httpCode);
-    }
-
-    http.end();
-    return;
-  }
-
-  if (whichReq == 10)
-  {
-    Serial.println("HTTP POST telemetry");
-    http.begin(sendDataPath.c_str());
-    http.addHeader("Content-Type", "application/json");
-
-    String body = String("{\"temperature\":\"") + currTemperature + String("\",\"humidity\":\"") + currHumidity + String("\",\"voltage\":\"") + currVoltage + String("\"}");
-    httpCode = http.POST(body);
-
-    if (httpCode > 0)
-    {
-      Serial.printf("HTTP data Response code: %d\n", httpCode);
-    }
-    else
-    {
-      Serial.printf("HTTP POST failed, code: %d\n", httpCode);
-    }
-
-    http.end();
-    return;
-  }
-
-  Serial.printf("Unknown request type: %d\n", whichReq);
-}
-
-void ResponseToClientRequests(void *parameter) // Client from WEB
-{
-  vTaskDelay(pdMS_TO_TICKS(2000));
-  Serial.println("ReplyToClientRequests");
-  for (;;)
-  {
-    vTaskDelay(pdMS_TO_TICKS(10));
-    client = server.available();
-    if (!client)
-    {
-      vTaskDelay(pdMS_TO_TICKS(200));
-      continue; // żaden klient nie czeka -> powtórz pętlę
-    }
-    /* check client is connected */
-    if (client.connected())
-    {
-
-      /* client send request? */
-      /* request end with '\r' -> this is HTTP protocol format */
-      String req = "";
-
-      while (client.available())
-      {
-        req += (char)client.read();
-      }
-
-      /* First line of HTTP request is "GET / HTTP/1.1"
-        here "GET /" is a request to get the first page at root "/"
-        "HTTP/1.1" is HTTP version 1.1
-      */
-      /* now we parse the request to see which page the client want */
-      int addr_start;
-
-      if (req.indexOf("OPTIONS") != -1)
-      {
-        addr_start = req.indexOf("OPTIONS") + strlen("OPTIONS");
-      }
-      else
-      {
-        addr_start = req.indexOf("GET") + strlen("GET");
-      }
-
-      int addr_end = req.indexOf("HTTP", addr_start);
-
-      if (addr_start == -1 || addr_end == -1)
-      {
-        continue;
-      }
-
-      req = req.substring(addr_start, addr_end);
-      req.trim();
-
-      Serial.print("Request: ");
-      Serial.println(req);
-
-      if (!lowEnergyMode)
-      {
-        digitalWrite(33, HIGH);
-      }
-
-      String httpMessageToClient = "";
-
-      if (req.indexOf("joy") != -1 && req != "/joystickPage")
-      {
-        String joyBool = "";
-        int joyStart = req.indexOf("k");
-
-        for (int i = joyStart + 1; i <= req.length() - 1; i++)
-        {
-          joyBool = joyBool + String(req[i]);
-        }
-
-        if (joyBool == "True")
-        {
-          joystickState = true;
-          joystickType = "phys";
-        }
-        else if (joyBool == "TrueWEB")
-        {
-          joystickState = true;
-          joystickType = "web";
-        }
-        else
-        {
-          joystickState = false;
-          joystickType = "";
-        }
-      }
-      else if (req.indexOf("Page") != -1)
-      {
-        if (req == "/startPage")
-        {
-          httpMessageToClient = "HTTP/1.1 200 OK\n";
-          httpMessageToClient += "Content-Type: text/html\n\n";
-          httpMessageToClient += index_html;
-          httpMessageToClient += "\n";
-
-          client.print(httpMessageToClient);
-        }
-        else if (req == "/joystickPage")
-        {
-          httpMessageToClient = "HTTP/1.1 200 OK\n";
-          httpMessageToClient += "Content-Type: text/html\n\n";
-          httpMessageToClient += joystick_html;
-          httpMessageToClient += "\n";
-
-          client.print(httpMessageToClient);
-        }
-      }
-      else if (req == "/data")
-      {
-        String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
-
-        httpMessageToClient = "HTTP/1.1 200 OK\n";
-        httpMessageToClient += "Access-Control-Allow-Headers: *\n";
-        httpMessageToClient += "Access-Control-Allow-Origin: *\n";
-        httpMessageToClient += "Content-Type: application/json\n\n";
-        httpMessageToClient += sendIt;
-        httpMessageToClient += "\n";
-
-        client.print(httpMessageToClient);
-      }
-
-      /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
-
-      else if (req == "/")
-      {
-        httpMessageToClient = "HTTP/1.1 200 OK\n";
-        httpMessageToClient += "Content-Type: text/html\n\n";
-        httpMessageToClient += index_html;
-        httpMessageToClient += "\n";
-
-        client.print(httpMessageToClient);
-
-        if (canLoad == true)
-        {
-          live_client = client;
-          live_client.print("HTTP/1.1 200 OK\n");
-          live_client.print("Access-Control-Allow-Origin: *\n");
-          live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-          live_client.flush();
-
-          canVideo = true;
-          canLoad = false;
-        }
-        else
-        {
-          canVideo = true;
-        }
-
-        digitalWrite(CONTROL_PIN_NUM, HIGH);
-      }
-
-      else if (req == "/video")
-      {
-
-        live_client = client;
-
-        live_client.print("HTTP/1.1 200 OK\n");
-        live_client.print("Access-Control-Allow-Headers: *\n");
-        live_client.print("Access-Control-Allow-Origin: *\n");
-        live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-        live_client.flush();
-
-        connected = true;
-
-        if (canVideo == true)
-        {
-          // Manually (request from site after manual click by user) load of video
-        }
-        else
-        {
-          canLoad = true;
-        }
-      }
-      else if (req == "/streamStop")
-      {
-        client.stop();
-        connected = false;
-      }
-      else if (req == "/streamStart")
-      {
-        live_client.flush();
-        connected = true;
-      }
-      else if (req == "/gosleep")
-      {
-        Serial.println("Going to sleep now");
-
-        delay(500);
-
-        esp_deep_sleep_start();
-      }
-      else if (req == "/sendData")
-      {
-        send_data("sendData");
-        uploadNeeded = true;
-      }
-      else if (req == "/normalEnergy")
-      {
-        normalEnergy();
-      }
-      else if (req == "/moveResults")
-      {
-        moves = "{\"data\":\"";
-
-        for (int i = 0; i < 340; i++)
-        {
-          moves += moveTimes[i];
-        }
-
-        moves += "\"}";
-
-        httpMessageToClient = "HTTP/1.1 200 OK\n";
-        httpMessageToClient += "Access-Control-Allow-Headers: *\n";
-        httpMessageToClient += "Access-Control-Allow-Origin: *\n";
-        httpMessageToClient += "Content-Type: application/json\n\n";
-        httpMessageToClient += moves;
-        httpMessageToClient += "\n";
-
-        client.print(httpMessageToClient);
-
-        delay(100);
-
-        moves = "";
-      }
-      else
-      {
-        if (req != "/favicon.ico")
-        {
-          send_data(req);
-        }
-      }
-    }
-    if (!lowEnergyMode)
-    {
-      digitalWrite(33, LOW);
-    }
-  }
-}
-
 void sendMailWithPhotos()
 {
+  if (moveLog.m_count < MOVE_ENTRIES_CAPACITY)
+  {
+    moveLog.m_count++;
+  }
+
   memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
 
   SMTP_Message message;
@@ -755,23 +232,23 @@ void sendMailWithPhotos()
     if (!getLocalTime(&timeinfo))
     {
       Serial.println("Failed to obtain time");
-      moveTimes[moveCounter] = String("Failed") + String("|");
-      moveCounter++;
+      moveLog[moveLog.m_writeIndex] = "Failed";
+      moveLog.m_writeIndex++;
 
-      if (moveCounter >= 340)
+      if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
       {
-        moveCounter = 0;
+        moveLog.m_writeIndex = 0;
       }
     }
     else if (i == 0)
     {
       strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
-      moveTimes[moveCounter] = String(timeAll) + String("|");
-      moveCounter++;
+      moveLog[moveLog.m_writeIndex] = timeAll;
+      moveLog.m_writeIndex++;
 
-      if (moveCounter >= 340)
+      if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
       {
-        moveCounter = 0;
+        moveLog.m_writeIndex = 0;
       }
     }
 
@@ -882,7 +359,7 @@ void handleSPIRequests(void *parameter) // requests from second board, MEGA 2560
 
 void liveCam(WiFiClient &client)
 {
-
+  // Serial.println("liveCam");
   camera_fb_t *fb = esp_camera_fb_get();
 
   if (!fb)
@@ -901,9 +378,181 @@ void liveCam(WiFiClient &client)
   esp_camera_fb_return(fb);
 }
 
+void setup()
+{
+
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+
+  setCpuFrequencyMhz(240);
+
+  Serial.begin(115200);
+
+  Serial.println("begin");
+
+  pinMode(33, OUTPUT); // Set LED pinMode
+
+  pinMode(CONTROL_PIN_NUM, OUTPUT);
+
+  spiMutex = xSemaphoreCreateMutex();
+
+  if (!spiMutex)
+  {
+    Serial.println("Nie można utworzyć muteksu SPI");
+    while (true)
+      vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+
+  Serial.println("mutex");
+
+  hspi = new SPIClass(HSPI);
+
+  if (!SPIFFS.begin(true))
+  {
+    // Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  pinMode(HSPI_SS, OUTPUT);
+  digitalWrite(HSPI_SS, HIGH);
+
+  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
+
+  Serial.println("SPI");
+
+  wifi_config_t wifi_config = {
+      .sta = {
+          .listen_interval = 3,
+      },
+  };
+
+  send_data("/0");
+
+  WiFi.begin(wifi_ssid, wifi_password); // Connect to WiFi with primary values
+  esp_wifi_set_ps(wifi_ps_type_t::WIFI_PS_NONE);
+  WiFi.setAutoReconnect(true);
+
+  int wifiTries = 0;
+
+  WiFi.setSleep(false);
+
+  delay(100);
+
+  Serial.println(psramFound() ? "PSRAM: OK" : "PSRAM: BRAK");
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    if (wifiTries == 20)
+    {
+      break;
+    }
+
+    delay(1000);
+    wifiTries++;
+  }
+
+  // If tries of connecting to primary WiFi are >= 20 then program tries to connect to secondary WiFi beacuse primary is probably not working
+
+  if (wifiTries >= 20)
+  {
+    WiFi.begin(wifi_ssid_reserve, wifi_password_reserve);
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(500);
+    }
+
+    wifiTries = NULL;
+  }
+
+  Serial.println(WiFi.localIP());
+  Serial.println("wifi");
+  Serial.println(WiFi.status());
+
+  delay(100);
+
+  WiFi.disconnect();
+
+  delay(200);
+
+  WiFi.reconnect();
+
+  mailConfig.server.host_name = SMTP_HOST;     // for outlook.com
+  mailConfig.server.port = SMTP_PORT;          // for TLS with STARTTLS or 25 (Plain/TLS with STARTTLS) or 465 (SSL)
+  mailConfig.login.email = AUTHOR_EMAIL;       // set to empty for no SMTP Authentication
+  mailConfig.login.password = AUTHOR_PASSWORD; // set to empty for no SMTP Authentication
+
+  // For client identity, assign invalid string can cause server rejection
+  mailConfig.login.user_domain = "";
+
+  smtp.debug(1);
+
+  String IP = WiFi.localIP().toString();
+
+  index_html.replace("change_this_ip", IP);
+  index_html.replace("index.html", "startPage");
+  index_html.replace("joystick.html", "joystickPage");
+
+  joystick_html.replace("change_this_ip", IP);
+  joystick_html.replace("index.html", "startPage");
+  joystick_html.replace("joystick.html", "joystickPage");
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  sntp_set_time_sync_notification_cb(timeSyncCallback);
+  sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED); // szybka aktualizacja po pierwszym razie
+
+  Serial.println("configNTP");
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, 1);
+
+  esp_bt_controller_disable(); // disable bluetooth for power saving
+
+  delay(10);
+  configCamera();
+  delay(20);
+  server.begin();
+
+  // lowEnergy();
+
+  xTaskCreatePinnedToCore(
+      handleSPIRequests, /* Task function. */
+      "requests",        /* name of task. */
+      10000,             /* Stack size of task */
+      NULL,              /* parameter of the task */
+      1,                 /* priority of the task */
+      &requests,         /* Task handle to keep track of created task */
+      1);                /* pin task to core 1 */
+
+  Serial.println("request task");
+
+  xTaskCreatePinnedToCore(
+      ResponseToClientRequests, /* Task function. */
+      "responses",              /* name of task. */
+      10000,                    /* Stack size of task */
+      NULL,                     /* parameter of the task */
+      1,                        /* priority of the task */
+      &responses,               /* Task handle to keep track of created task */
+      0);                       /* pin task to core 0 */
+
+  Serial.println("Setup done.");
+}
+
+static void timeSyncCallback(struct timeval *tv)
+{
+  Serial.println("NTP: synchronized");
+}
+
+// unsigned long moveTestMillis = 0;
+
 void loop()
 {
-  vTaskDelay(pdMS_TO_TICKS(5));
+  vTaskDelay(pdMS_TO_TICKS(connected ? 5 : 30));
+
+  // if (millis() - moveTestMillis >= 5000)
+  // {
+  //   sendMailWithPhotos();
+  //   moveTestMillis = millis();
+  // }
 
   if (millis() - boardStillAliveTimeout >= 700)
   {
@@ -911,9 +560,9 @@ void loop()
     boardStillAliveTimeout = millis();
   }
 
-  if (connected == true)
+  if (connected)
   {
-    if (millis() - prevMillisLIVECAM >= 25)
+    if (millis() - prevMillisLIVECAM >= 40)
     {
       liveCam(live_client);
       prevMillisLIVECAM = millis();
