@@ -9,6 +9,7 @@
 // ── Core Arduino / ESP-IDF libraries ──────────────────────────
 #include <Arduino.h>
 #include <array>
+#include <atomic>
 #include <string.h>
 #include <SPI.h>
 #include <WiFi.h>
@@ -17,7 +18,6 @@
 #include <SPIFFS.h>
 #include <ESP_Mail_Client.h>
 #include "esp_camera.h"
-#include "ESP32_OV5640_AF.h"
 #include "esp_wifi.h"
 #include "esp_bt.h"
 #include "esp32-hal-cpu.h"
@@ -59,9 +59,6 @@ SET_LOOP_TASK_STACK_SIZE(16384);
 #define HSPI_SCLK 14
 #define HSPI_SS 15
 
-// ── Other pins ─────────────────────────
-#define CONTROL_PIN_NUM 2
-
 // ── SMTP config ─────────────────────────
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
@@ -89,9 +86,9 @@ const int daylightOffset_sec = 7200;
 
 // SensorData currentSensorData{};
 
-unsigned int currTemperature = 0;
-unsigned int currHumidity = 0;
-unsigned int currVoltage = 0;
+std::atomic<unsigned int> currTemperature{0};
+std::atomic<unsigned int> currHumidity{0};
+std::atomic<unsigned int> currVoltage{0};
 
 // ── Web config ─────────────────────────
 const int serverPort = server_port;
@@ -103,9 +100,16 @@ WiFiClient live_client;
 WiFiClient client;
 WiFiServer server(serverPort);
 
+// ── Request type ─────────────────────────
+enum class HttpRequestType
+{
+  Joystick,
+  Telemetry
+};
+
 // ── Global flags ─────────────────────────
-bool uploadNeeded = false;
-bool connected = false;
+std::atomic<bool> uploadNeeded{false};
+std::atomic<bool> connected{false};
 bool gotMessage = false;
 bool lowEnergyMode = false;
 
@@ -158,11 +162,11 @@ void configCamera()
   cam_config.pin_sscb_scl = SIOC_GPIO_NUM;
   cam_config.pin_pwdn = PWDN_GPIO_NUM;
   cam_config.pin_reset = RESET_GPIO_NUM;
-  cam_config.xclk_freq_hz = 16000000;
+  cam_config.xclk_freq_hz = 20000000;
   cam_config.pixel_format = PIXFORMAT_JPEG;
 
   cam_config.frame_size = FRAMESIZE_HD;
-  cam_config.jpeg_quality = 12; // 0-63 lower number means higher quality
+  cam_config.jpeg_quality = 16; // 0-63 lower number means higher quality
   cam_config.fb_count = 2;
 
   esp_err_t err = esp_camera_init(&cam_config);
@@ -174,8 +178,9 @@ void configCamera()
   }
 
   sensor_t *s = esp_camera_sensor_get();
-  // s->set_vflip(s, 1);
   s->set_brightness(s, -1);
+  s->set_hmirror(s, 1);
+
   if (s->id.PID == OV3660_PID)
   {
 
@@ -323,12 +328,12 @@ void sendAirAndVoltageData(String recivedData)
 
   if (uploadNeeded)
   {
-    httpDataRequest(10);
+    httpDataRequest(HttpRequestType::Telemetry);
     uploadNeeded = false;
   }
 }
 
-void handleSPIRequests(void *parameter) // requests from second board, MEGA 2560
+void handleSPIRequests(void *parameter) // requests from MEGA 2560
 {
   vTaskDelay(pdMS_TO_TICKS(1000));
   Serial.println("handleSPIRequests");
@@ -344,7 +349,8 @@ void handleSPIRequests(void *parameter) // requests from second board, MEGA 2560
 
       if (copyOfData == "MOVE")
       {
-        sendMailWithPhotos();
+        Serial.println("MOVE DETECTED");
+        // sendMailWithPhotos();
       }
       else
       {
@@ -390,8 +396,6 @@ void setup()
   Serial.println("begin");
 
   pinMode(33, OUTPUT); // Set LED pinMode
-
-  pinMode(CONTROL_PIN_NUM, OUTPUT);
 
   spiMutex = xSemaphoreCreateMutex();
 
@@ -542,17 +546,9 @@ static void timeSyncCallback(struct timeval *tv)
   Serial.println("NTP: synchronized");
 }
 
-// unsigned long moveTestMillis = 0;
-
 void loop()
 {
   vTaskDelay(pdMS_TO_TICKS(connected ? 5 : 30));
-
-  // if (millis() - moveTestMillis >= 5000)
-  // {
-  //   sendMailWithPhotos();
-  //   moveTestMillis = millis();
-  // }
 
   if (millis() - boardStillAliveTimeout >= 700)
   {
@@ -562,7 +558,7 @@ void loop()
 
   if (connected)
   {
-    if (millis() - prevMillisLIVECAM >= 40)
+    if (millis() - prevMillisLIVECAM >= 55)
     {
       liveCam(live_client);
       prevMillisLIVECAM = millis();

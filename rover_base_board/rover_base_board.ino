@@ -32,7 +32,6 @@ dht DHT;
 
 #define servopin 3
 #define PIRpin 40
-#define CONTROL_PIN 44
 
 int deg = 0;
 
@@ -627,7 +626,6 @@ void setup()
   pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
   pinMode(ECHO_PIN, INPUT);  // Sets the echoPin as an INPUT
   pinMode(PIRpin, INPUT);
-  pinMode(CONTROL_PIN, INPUT);
 
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
@@ -661,14 +659,6 @@ void loop()
 
   if (millis() - prevMillisControl >= 2200)
   {
-    // if (digitalRead(CONTROL_PIN))
-    // {
-    // }
-    // else
-    // {
-    //   stoper();
-    //   delay(500);
-    // }
     stoper();
     delay(500);
 

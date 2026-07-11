@@ -3,20 +3,16 @@
 #include "Arduino.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <atomic>
 #include "../spi/spi_comm.h"
 
 extern String joystickPath;
 extern String sendDataPath;
-extern unsigned int currTemperature;
-extern unsigned int currHumidity;
-extern unsigned int currVoltage;
+extern std::atomic<unsigned int> currTemperature;
+extern std::atomic<unsigned int> currHumidity;
+extern std::atomic<unsigned int> currVoltage;
 
-/* Codes
-1 - joystick
-10 - send POST req with measured data
-*/
-
-void httpDataRequest(int whichReq)
+void httpDataRequest(HttpRequestType reqType)
 {
 
     if (WiFi.status() != WL_CONNECTED)
@@ -28,7 +24,7 @@ void httpDataRequest(int whichReq)
     HTTPClient http;
     int httpCode = -1;
 
-    if (whichReq == 1)
+    if (reqType == HttpRequestType::Joystick)
     {
         Serial.println("HTTP GET joystick");
         http.begin(joystickPath.c_str());
@@ -50,7 +46,7 @@ void httpDataRequest(int whichReq)
         return;
     }
 
-    if (whichReq == 10)
+    if (reqType == HttpRequestType::Telemetry)
     {
         Serial.println("HTTP POST telemetry");
         http.begin(sendDataPath.c_str());
@@ -72,7 +68,7 @@ void httpDataRequest(int whichReq)
         return;
     }
 
-    Serial.printf("Unknown request type: %d\n", whichReq);
+    Serial.println("Unknown request type.");
 }
 
 #endif

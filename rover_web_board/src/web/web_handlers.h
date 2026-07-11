@@ -2,6 +2,7 @@
 #define WEB_HANDLERS_H
 #include "Arduino.h"
 #include <WiFi.h>
+#include <atomic>
 
 #include "../spi/spi_comm.h"
 #include "../move_log/move_entry.h"
@@ -13,22 +14,166 @@ extern WiFiServer server;
 extern String index_html;
 extern String joystick_html;
 
-extern unsigned int currTemperature;
-extern unsigned int currHumidity;
-extern unsigned int currVoltage;
+extern std::atomic<unsigned int> currTemperature;
+extern std::atomic<unsigned int> currHumidity;
+extern std::atomic<unsigned int> currVoltage;
 
-extern bool connected;
-extern bool uploadNeeded;
+extern std::atomic<bool> connected;
+extern std::atomic<bool> uploadNeeded;
 extern bool lowEnergyMode;
 extern MoveLog moveLog;
 
-String moves;
-bool canVideo;
-bool canLoad;
 bool joystickState;
 String joystickType;
+String moves;
 
 void normalEnergy();
+void lowEnergy();
+
+void handleJoystickState(const String &req)
+{
+    String joyBool = "";
+    int joyStart = req.indexOf("k");
+
+    for (int i = joyStart + 1; i <= req.length() - 1; i++)
+    {
+        joyBool = joyBool + String(req[i]);
+    }
+
+    if (joyBool == "True")
+    {
+        joystickState = true;
+        joystickType = "phys";
+    }
+    else if (joyBool == "TrueWEB")
+    {
+        joystickState = true;
+        joystickType = "web";
+    }
+    else
+    {
+        joystickState = false;
+        joystickType = "";
+    }
+}
+
+void handleStartPage()
+{
+    String httpMessageToClient = "HTTP/1.1 200 OK\n";
+    httpMessageToClient += "Content-Type: text/html\n\n";
+    httpMessageToClient += index_html;
+    httpMessageToClient += "\n";
+
+    client.print(httpMessageToClient);
+}
+
+void handleJoystickPage()
+{
+    String httpMessageToClient = "HTTP/1.1 200 OK\n";
+    httpMessageToClient += "Content-Type: text/html\n\n";
+    httpMessageToClient += joystick_html;
+    httpMessageToClient += "\n";
+
+    client.print(httpMessageToClient);
+}
+
+void handleDataRequest()
+{
+    String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
+
+    String httpMessageToClient = "HTTP/1.1 200 OK\n";
+    httpMessageToClient += "Access-Control-Allow-Headers: *\n";
+    httpMessageToClient += "Access-Control-Allow-Origin: *\n";
+    httpMessageToClient += "Content-Type: application/json\n\n";
+    httpMessageToClient += sendIt;
+    httpMessageToClient += "\n";
+
+    client.print(httpMessageToClient);
+}
+
+/* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
+void handleRootPage()
+{
+    String httpMessageToClient = "HTTP/1.1 200 OK\n";
+    httpMessageToClient += "Content-Type: text/html\n\n";
+    httpMessageToClient += index_html;
+    httpMessageToClient += "\n";
+
+    client.print(httpMessageToClient);
+}
+
+void handleVideoRequest()
+{
+    live_client = client;
+
+    live_client.print("HTTP/1.1 200 OK\n");
+    live_client.print("Access-Control-Allow-Headers: *\n");
+    live_client.print("Access-Control-Allow-Origin: *\n");
+    live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
+    live_client.flush();
+
+    connected = true;
+}
+
+void handleStreamStop()
+{
+    client.stop();
+    connected = false;
+}
+
+void handleStreamStart()
+{
+    live_client.flush();
+    connected = true;
+}
+
+void handleGoSleep()
+{
+    Serial.println("Going to sleep now");
+
+    delay(500);
+
+    esp_deep_sleep_start();
+}
+
+void handleSendDataRequest()
+{
+    send_data("sendData");
+    uploadNeeded = true;
+}
+
+void handleMoveResults()
+{
+    moves = "{\"data\":\"";
+
+    for (int i = 0; i < moveLog.m_count; i++)
+    {
+        moves += moveLog[i].m_timestamp.data();
+    }
+
+    moves += "\"}";
+
+    String httpMessageToClient = "HTTP/1.1 200 OK\n";
+    httpMessageToClient += "Access-Control-Allow-Headers: *\n";
+    httpMessageToClient += "Access-Control-Allow-Origin: *\n";
+    httpMessageToClient += "Content-Type: application/json\n\n";
+    httpMessageToClient += moves;
+    httpMessageToClient += "\n";
+
+    client.print(httpMessageToClient);
+
+    delay(100);
+
+    moves = "";
+}
+
+void handleUnknownRequest(const String &req)
+{
+    if (req != "/favicon.ico")
+    {
+        send_data(req);
+    }
+}
 
 void ResponseToClientRequests(void *parameter) // Client from WEB
 {
@@ -91,178 +236,64 @@ void ResponseToClientRequests(void *parameter) // Client from WEB
                 digitalWrite(33, HIGH);
             }
 
-            String httpMessageToClient = "";
-
             if (req.indexOf("joy") != -1 && req != "/joystickPage")
             {
-                String joyBool = "";
-                int joyStart = req.indexOf("k");
-
-                for (int i = joyStart + 1; i <= req.length() - 1; i++)
-                {
-                    joyBool = joyBool + String(req[i]);
-                }
-
-                if (joyBool == "True")
-                {
-                    joystickState = true;
-                    joystickType = "phys";
-                }
-                else if (joyBool == "TrueWEB")
-                {
-                    joystickState = true;
-                    joystickType = "web";
-                }
-                else
-                {
-                    joystickState = false;
-                    joystickType = "";
-                }
+                handleJoystickState(req);
             }
             else if (req.indexOf("Page") != -1)
             {
                 if (req == "/startPage")
                 {
-                    httpMessageToClient = "HTTP/1.1 200 OK\n";
-                    httpMessageToClient += "Content-Type: text/html\n\n";
-                    httpMessageToClient += index_html;
-                    httpMessageToClient += "\n";
-
-                    client.print(httpMessageToClient);
+                    handleStartPage();
                 }
                 else if (req == "/joystickPage")
                 {
-                    httpMessageToClient = "HTTP/1.1 200 OK\n";
-                    httpMessageToClient += "Content-Type: text/html\n\n";
-                    httpMessageToClient += joystick_html;
-                    httpMessageToClient += "\n";
-
-                    client.print(httpMessageToClient);
+                    handleJoystickPage();
                 }
             }
             else if (req == "/data")
             {
-                String sendIt = "{\"temperature\":\"" + String(currTemperature) + "\",\"humidity\":\"" + String(currHumidity) + "\",\"voltage\":\"" + currVoltage + "\"}";
-
-                httpMessageToClient = "HTTP/1.1 200 OK\n";
-                httpMessageToClient += "Access-Control-Allow-Headers: *\n";
-                httpMessageToClient += "Access-Control-Allow-Origin: *\n";
-                httpMessageToClient += "Content-Type: application/json\n\n";
-                httpMessageToClient += sendIt;
-                httpMessageToClient += "\n";
-
-                client.print(httpMessageToClient);
+                handleDataRequest();
             }
-
-            /* if request is "/" then client request the first page at root "/" -> it will return our site in index.h*/
-
             else if (req == "/")
             {
-                httpMessageToClient = "HTTP/1.1 200 OK\n";
-                httpMessageToClient += "Content-Type: text/html\n\n";
-                httpMessageToClient += index_html;
-                httpMessageToClient += "\n";
-
-                client.print(httpMessageToClient);
-
-                if (canLoad == true)
-                {
-                    live_client = client;
-                    live_client.print("HTTP/1.1 200 OK\n");
-                    live_client.print("Access-Control-Allow-Origin: *\n");
-                    live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-                    live_client.flush();
-
-                    canVideo = true;
-                    canLoad = false;
-                }
-                else
-                {
-                    canVideo = true;
-                }
-
-                digitalWrite(CONTROL_PIN_NUM, HIGH);
+                handleRootPage();
             }
-
             else if (req == "/video")
             {
-
-                live_client = client;
-
-                live_client.print("HTTP/1.1 200 OK\n");
-                live_client.print("Access-Control-Allow-Headers: *\n");
-                live_client.print("Access-Control-Allow-Origin: *\n");
-                live_client.print("Content-Type: multipart/x-mixed-replace; boundary=frame\n\n");
-                live_client.flush();
-
-                connected = true;
-
-                if (canVideo == true)
-                {
-                    // Manually (request from site after manual click by user) load of video
-                }
-                else
-                {
-                    canLoad = true;
-                }
+                handleVideoRequest();
             }
             else if (req == "/streamStop")
             {
-                client.stop();
-                connected = false;
+                handleStreamStop();
             }
             else if (req == "/streamStart")
             {
-                live_client.flush();
-                connected = true;
+                handleStreamStart();
             }
             else if (req == "/gosleep")
             {
-                Serial.println("Going to sleep now");
-
-                delay(500);
-
-                esp_deep_sleep_start();
+                handleGoSleep();
             }
             else if (req == "/sendData")
             {
-                send_data("sendData");
-                uploadNeeded = true;
+                handleSendDataRequest();
             }
             else if (req == "/normalEnergy")
             {
                 normalEnergy();
             }
+            else if (req == "/lowEnergy")
+            {
+                lowEnergy();
+            }
             else if (req == "/moveResults")
             {
-                moves = "{\"data\":\"";
-
-                for (int i = 0; i < moveLog.m_count; i++)
-                {
-                    moves += moveLog[i].m_timestamp.data();
-                }
-
-                moves += "\"}";
-
-                httpMessageToClient = "HTTP/1.1 200 OK\n";
-                httpMessageToClient += "Access-Control-Allow-Headers: *\n";
-                httpMessageToClient += "Access-Control-Allow-Origin: *\n";
-                httpMessageToClient += "Content-Type: application/json\n\n";
-                httpMessageToClient += moves;
-                httpMessageToClient += "\n";
-
-                client.print(httpMessageToClient);
-
-                delay(100);
-
-                moves = "";
+                handleMoveResults();
             }
             else
             {
-                if (req != "/favicon.ico")
-                {
-                    send_data(req);
-                }
+                handleUnknownRequest(req);
             }
         }
         if (!lowEnergyMode)
