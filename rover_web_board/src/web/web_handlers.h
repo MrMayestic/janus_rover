@@ -30,6 +30,8 @@ String moves;
 void normalEnergy();
 void lowEnergy();
 
+extern SemaphoreHandle_t moveLogMutex;
+
 void handleJoystickState(const String &req)
 {
     String joyBool = "";
@@ -144,6 +146,8 @@ void handleSendDataRequest()
 
 void handleMoveResults()
 {
+    xSemaphoreTake(moveLogMutex, portMAX_DELAY);
+
     moves = "{\"data\":\"";
 
     for (int i = 0; i < moveLog.m_count; i++)
@@ -152,6 +156,8 @@ void handleMoveResults()
     }
 
     moves += "\"}";
+
+    xSemaphoreGive(moveLogMutex);
 
     String httpMessageToClient = "HTTP/1.1 200 OK\n";
     httpMessageToClient += "Access-Control-Allow-Headers: *\n";

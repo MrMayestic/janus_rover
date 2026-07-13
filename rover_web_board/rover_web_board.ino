@@ -140,6 +140,7 @@ TaskHandle_t requests;
 // ── Move log ─────────────────────────
 MoveLog moveLog;
 char timeAll[24]; // last formatted timestamp
+SemaphoreHandle_t moveLogMutex;
 
 void configCamera()
 {
@@ -209,10 +210,12 @@ void normalEnergy()
 
 void sendMailWithPhotos()
 {
+  xSemaphoreTake(moveLogMutex, portMAX_DELAY);
   if (moveLog.m_count < MOVE_ENTRIES_CAPACITY)
   {
     moveLog.m_count++;
   }
+  xSemaphoreGive(moveLogMutex);
 
   memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
 
@@ -234,6 +237,7 @@ void sendMailWithPhotos()
     camera_fb_t *photo = esp_camera_fb_get();
 
     struct tm timeinfo;
+    xSemaphoreTake(moveLogMutex, portMAX_DELAY);
     if (!getLocalTime(&timeinfo))
     {
       Serial.println("Failed to obtain time");
@@ -256,6 +260,7 @@ void sendMailWithPhotos()
         moveLog.m_writeIndex = 0;
       }
     }
+    xSemaphoreGive(moveLogMutex);
 
     if (photo)
     {
@@ -398,6 +403,7 @@ void setup()
   pinMode(33, OUTPUT); // Set LED pinMode
 
   spiMutex = xSemaphoreCreateMutex();
+  moveLogMutex = xSemaphoreCreateMutex();
 
   if (!spiMutex)
   {
