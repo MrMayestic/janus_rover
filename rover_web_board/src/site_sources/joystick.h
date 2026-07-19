@@ -396,7 +396,7 @@ const char JOYSTICK_page[] PROGMEM = R"=====(
         let currentL = 0;
         let currentR = 0;
 
-        let server_ip = "change_this_ip";
+        let server_ip = "ROVER_IP_ADDRESS";
 
         function isMobileOrTablet() {
             let check = false;

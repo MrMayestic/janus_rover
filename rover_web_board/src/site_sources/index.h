@@ -449,9 +449,9 @@ const char INDEX_page[] PROGMEM = R"=====(
     </main>
     <script>
         let precSter = 0;
-        let precLetter = ""; //to usprawnić sending data
+        let precLetter = "";
         let streamOnToggle = false;
-        let server_ip = "192.168.11.48";
+        let server_ip = "ROVER_IP_ADDRESS";
 
         const darkLightBtn = document.querySelector("#darkLight");
         const onOffVideoBtn = document.querySelector("#onOffVideo");

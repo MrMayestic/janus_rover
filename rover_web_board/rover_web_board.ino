@@ -30,6 +30,9 @@
 #include "src/site_sources/index.h"    //main WWW site
 #include "src/site_sources/joystick.h" //joystick steering WWW site
 
+// ── Telemetry header ─────────────────────────
+#include "src/sensor_data/sensor_data.h"
+
 // ── Build / library config ────────────────────────────────────
 SET_LOOP_TASK_STACK_SIZE(16384);
 #define CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH
@@ -53,19 +56,11 @@ SET_LOOP_TASK_STACK_SIZE(16384);
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
 
-// ── SPI pins (communication with MEGA 2560) ─────────────────────────
-#define HSPI_MISO 12
-#define HSPI_MOSI 13
-#define HSPI_SCLK 14
-#define HSPI_SS 15
-
 // ── SMTP config ─────────────────────────
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
-
-// ── Global consts for capacity/protocols ─────────────────────────
-#define MAX_REC_LEN 64            // max message length
-#define MOVE_ENTRIES_CAPACITY 300 // max move entries stored
+#define MAIL_PHOTOS_AMOUNT 2
+#define MAIL_PHOTO_TIME_PADDING_MS 900
 
 // ── Mail ─────────────────────────
 SMTPSession smtp;
@@ -77,18 +72,7 @@ const long gmtOffset_sec = 0;
 const int daylightOffset_sec = 7200;
 
 // ── Telemetry ─────────────────────────
-// struct SensorData
-// {
-//   unsigned int currTemperature = 0;
-//   unsigned int currHumidity = 0;
-//   unsigned int currVoltage = 0;
-// };
-
-// SensorData currentSensorData{};
-
-std::atomic<unsigned int> currTemperature{0};
-std::atomic<unsigned int> currHumidity{0};
-std::atomic<unsigned int> currVoltage{0};
+SensorData currentSensorData{};
 
 // ── Web config ─────────────────────────
 const int serverPort = server_port;
@@ -99,13 +83,6 @@ String sendDataPath = "http://" + String(serverIP) + ":8080/sendData";
 WiFiClient live_client;
 WiFiClient client;
 WiFiServer server(serverPort);
-
-// ── Request type ─────────────────────────
-enum class HttpRequestType
-{
-  Joystick,
-  Telemetry
-};
 
 // ── Global flags ─────────────────────────
 std::atomic<bool> uploadNeeded{false};
@@ -220,8 +197,9 @@ void sendMailWithPhotos()
   memset(timeAll, 0, sizeof(timeAll) / sizeof(timeAll[0]));
 
   SMTP_Message message;
+  uint8_t *photoCopies[MAIL_PHOTOS_AMOUNT] = {nullptr};
 
-  for (int i = 0; i <= 1; i++)
+  for (int i = 0; i < MAIL_PHOTOS_AMOUNT; i++)
   {
     SMTP_Attachment att;
 
@@ -232,55 +210,27 @@ void sendMailWithPhotos()
       client.stop();
       connected = false;
     }
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(25));
 
     camera_fb_t *photo = esp_camera_fb_get();
 
-    struct tm timeinfo;
-    xSemaphoreTake(moveLogMutex, portMAX_DELAY);
-    if (!getLocalTime(&timeinfo))
-    {
-      Serial.println("Failed to obtain time");
-      moveLog[moveLog.m_writeIndex] = "Failed";
-      moveLog.m_writeIndex++;
-
-      if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
-      {
-        moveLog.m_writeIndex = 0;
-      }
-    }
-    else if (i == 0)
-    {
-      strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
-      moveLog[moveLog.m_writeIndex] = timeAll;
-      moveLog.m_writeIndex++;
-
-      if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
-      {
-        moveLog.m_writeIndex = 0;
-      }
-    }
-    xSemaphoreGive(moveLogMutex);
-
     if (photo)
     {
-      uint8_t *photoBuf = photo->buf;
+      // Attach copy of current buffered photo
+      photoCopies[i] = (uint8_t *)ps_malloc(photo->len);
+      memcpy(photoCopies[i], photo->buf, photo->len);
+      att.blob.data = photoCopies[i];
+      att.blob.size = photo->len;
+
+      esp_camera_fb_return(photo);
 
       // Set the attatchment info
-
-      att.descr.filename = String(timeAll) + ".jpg";
+      att.descr.filename = "photo" + String(i + 1) + ".jpg";
       att.descr.mime = "image/jpeg";
-      att.blob.data = photoBuf;
-      att.blob.size = photo->len;
-      // Set the transfer encoding to base64
       att.descr.transfer_encoding = Content_Transfer_Encoding::enc_base64;
-      // // We set the content encoding to match the above greenImage data
-      // att.descr.content_encoding = Content_Transfer_Encoding::enc_base64;
 
       // Add attachment to the message
       message.addAttachment(att);
-
-      esp_camera_fb_return(photo);
 
       vTaskDelay(pdMS_TO_TICKS(25));
 
@@ -291,8 +241,37 @@ void sendMailWithPhotos()
       }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(900));
+    vTaskDelay(pdMS_TO_TICKS(MAIL_PHOTO_TIME_PADDING_MS));
   }
+
+  struct tm timeinfo;
+
+  xSemaphoreTake(moveLogMutex, portMAX_DELAY);
+
+  if (!getLocalTime(&timeinfo))
+  {
+    Serial.println("Failed to obtain time");
+    moveLog[moveLog.m_writeIndex] = "Time failed";
+    moveLog.m_writeIndex++;
+
+    if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
+    {
+      moveLog.m_writeIndex = 0;
+    }
+  }
+  else
+  {
+    strftime(timeAll, 18, "%m-%d %H:%M:%S", &timeinfo); // Load time
+    moveLog[moveLog.m_writeIndex] = timeAll;
+    moveLog.m_writeIndex++;
+
+    if (moveLog.m_writeIndex >= MOVE_ENTRIES_CAPACITY)
+    {
+      moveLog.m_writeIndex = 0;
+    }
+  }
+
+  xSemaphoreGive(moveLogMutex);
 
   message.sender.name = "Janus_rover";
   message.sender.email = RECIPIENT_EMAIL;
@@ -305,6 +284,9 @@ void sendMailWithPhotos()
 
   if (!MailClient.sendMail(&smtp, &message))
     Serial.println("Error sending Email, " + smtp.errorReason());
+
+  for (auto p : photoCopies)
+    free(p);
 }
 
 void sendAirAndVoltageData(String recivedData)
@@ -320,15 +302,15 @@ void sendAirAndVoltageData(String recivedData)
 
   if (temperature.toInt() > 0 && temperature.toInt() < 50)
   {
-    currTemperature = temperature.toInt();
+    currentSensorData.m_currTemperature = temperature.toInt();
   }
   if (humidity.toInt() > 0 && humidity.toInt() <= 100)
   {
-    currHumidity = humidity.toInt();
+    currentSensorData.m_currHumidity = humidity.toInt();
   }
   if (voltage_read.toInt() > 0)
   {
-    currVoltage = voltage_read.toInt();
+    currentSensorData.m_currVoltage = voltage_read.toInt();
   }
 
   if (uploadNeeded)
@@ -355,7 +337,7 @@ void handleSPIRequests(void *parameter) // requests from MEGA 2560
       if (copyOfData == "MOVE")
       {
         Serial.println("MOVE DETECTED");
-        // sendMailWithPhotos();
+        sendMailWithPhotos();
       }
       else
       {
@@ -478,6 +460,8 @@ void setup()
   Serial.println("wifi");
   Serial.println(WiFi.status());
 
+  String IP = WiFi.localIP().toString();
+
   delay(100);
 
   WiFi.disconnect();
@@ -496,13 +480,11 @@ void setup()
 
   smtp.debug(1);
 
-  String IP = WiFi.localIP().toString();
-
-  index_html.replace("change_this_ip", IP);
+  index_html.replace("ROVER_IP_ADDRESS", IP);
   index_html.replace("index.html", "startPage");
   index_html.replace("joystick.html", "joystickPage");
 
-  joystick_html.replace("change_this_ip", IP);
+  joystick_html.replace("ROVER_IP_ADDRESS", IP);
   joystick_html.replace("index.html", "startPage");
   joystick_html.replace("joystick.html", "joystickPage");
 

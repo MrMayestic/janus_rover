@@ -3,6 +3,15 @@
 #include "Arduino.h"
 #include <SPI.h>
 
+// ── SPI pins (communication with MEGA 2560) ─────────────────────────
+#define HSPI_MISO 12
+#define HSPI_MOSI 13
+#define HSPI_SCLK 14
+#define HSPI_SS 15
+
+// ── Global consts for capacity/protocols ─────────────────────────
+#define MAX_REC_LEN 64 // max message length
+
 static const int spiClk = 4000000; // Clock for SPI
 
 extern SemaphoreHandle_t spiMutex;
@@ -11,66 +20,9 @@ extern String recivedData;
 extern bool gotMessage;
 
 /*Function that handles SPI Sending to Slave (rover main board)*/
-
-void send_data(const String &stringMess)
-{
-    xSemaphoreTake(spiMutex, portMAX_DELAY);
-
-    hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-    digitalWrite(HSPI_SS, LOW);
-    delayMicroseconds(5);
-
-    // Data transfer
-    char buf[32] = {0};
-    stringMess.toCharArray(buf, sizeof(buf));
-
-    for (size_t i = 0; buf[i]; i++)
-    {
-        delayMicroseconds(25);
-        hspi->transfer(buf[i]);
-    }
-
-    delayMicroseconds(10);
-    hspi->transfer(4);
-
-    digitalWrite(HSPI_SS, HIGH);
-    hspi->endTransaction();
-
-    xSemaphoreGive(spiMutex);
-}
+void send_data(const String &stringMess);
 
 /*Function that reads data from Slave*/
-
-void read_data()
-{
-    xSemaphoreTake(spiMutex, portMAX_DELAY);
-
-    hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
-    digitalWrite(HSPI_SS, LOW);
-
-    recivedData = "";
-
-    for (int i = 0; i < MAX_REC_LEN; i++)
-    {
-        uint8_t byteRead = hspi->transfer(0x00);
-
-        if (byteRead == 4)
-        {
-            gotMessage = true;
-            break;
-        }
-
-        if (byteRead >= 32 && byteRead < 128)
-        {
-            recivedData += char(byteRead);
-        }
-        delayMicroseconds(25);
-    }
-
-    digitalWrite(HSPI_SS, HIGH);
-    hspi->endTransaction();
-
-    xSemaphoreGive(spiMutex);
-}
+void read_data();
 
 #endif

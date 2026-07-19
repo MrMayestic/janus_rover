@@ -2,6 +2,8 @@
 #define MOVE_LOG_H
 #include "move_entry.h"
 
+#define MOVE_ENTRIES_CAPACITY 300 // max move entries stored
+
 struct MoveLog
 {
     std::array<MoveEntry, MOVE_ENTRIES_CAPACITY> m_entries;
