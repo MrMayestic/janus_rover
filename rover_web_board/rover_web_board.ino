@@ -15,7 +15,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
-#include <SPIFFS.h>
 #include <ESP_Mail_Client.h>
 #include "esp_camera.h"
 #include "esp_wifi.h"
@@ -294,23 +293,32 @@ void sendAirAndVoltageData(String recivedData)
   int tempStartingIndex = recivedData.indexOf("t");
   int humidityStartingIndex = recivedData.indexOf("h");
   int voltageStartingIndex = recivedData.indexOf("v");
+
+  if (tempStartingIndex == -1 || humidityStartingIndex == -1 || voltageStartingIndex == -1)
+  {
+    Serial.println("Malformed sensor data, ignoring");
+    return;
+  }
+
   String temperature = recivedData.substring(tempStartingIndex + 1, humidityStartingIndex);
   String humidity = recivedData.substring(humidityStartingIndex + 1, voltageStartingIndex);
-  String voltage_read = recivedData.substring(voltageStartingIndex + 1, recivedData.length());
+  String voltage = recivedData.substring(voltageStartingIndex + 1, recivedData.length());
 
-  recivedData = "";
+  int temperatureValue = temperature.toInt();
+  int humidityValue = humidity.toInt();
+  int voltageValue = voltage.toInt();
 
-  if (temperature.toInt() > 0 && temperature.toInt() < 50)
+  if (temperatureValue > 0 && temperatureValue < 50)
   {
-    currentSensorData.m_currTemperature = temperature.toInt();
+    currentSensorData.m_currTemperature = temperatureValue;
   }
-  if (humidity.toInt() > 0 && humidity.toInt() <= 100)
+  if (humidityValue > 0 && humidityValue <= 100)
   {
-    currentSensorData.m_currHumidity = humidity.toInt();
+    currentSensorData.m_currHumidity = humidityValue;
   }
-  if (voltage_read.toInt() > 0)
+  if (voltageValue > 0 && voltageValue < 15000) // 15000 mV sanity ceiling, adjust if you know the real expected range
   {
-    currentSensorData.m_currVoltage = voltage_read.toInt();
+    currentSensorData.m_currVoltage = voltageValue;
   }
 
   if (uploadNeeded)
@@ -398,24 +406,12 @@ void setup()
 
   hspi = new SPIClass(HSPI);
 
-  if (!SPIFFS.begin(true))
-  {
-    // Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
   pinMode(HSPI_SS, OUTPUT);
   digitalWrite(HSPI_SS, HIGH);
 
   hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
 
   Serial.println("SPI");
-
-  wifi_config_t wifi_config = {
-      .sta = {
-          .listen_interval = 3,
-      },
-  };
 
   send_data("/0");
 
@@ -453,7 +449,7 @@ void setup()
       delay(500);
     }
 
-    wifiTries = NULL;
+    wifiTries = 0;
   }
 
   Serial.println(WiFi.localIP());

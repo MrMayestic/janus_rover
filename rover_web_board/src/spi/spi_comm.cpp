@@ -37,6 +37,7 @@ void read_data()
     digitalWrite(HSPI_SS, LOW);
 
     recivedData = "";
+    recivedData.reserve(MAX_REC_LEN);
 
     for (int i = 0; i < MAX_REC_LEN; i++)
     {
