@@ -15,7 +15,6 @@
 extern bool colideToggle;
 extern bool doesForward;
 extern bool isMoving;
-extern bool waiter;
 extern bool xToggle;
 
 void forward()
@@ -33,7 +32,6 @@ void forward()
     digitalWrite(IN3, LOW);
     digitalWrite(IN4, HIGH);
     //  Serial.println("go forward!");
-    waiter = true;
     doesForward = true;
     isMoving = true;
   }
@@ -48,7 +46,6 @@ void back()
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
   //  Serial.println("go back!");
-  waiter = true;
   doesForward = false;
   isMoving = true;
 }
@@ -62,7 +59,6 @@ void left()
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
   //  Serial.println("go left!");
-  waiter = true;
   doesForward = false;
   isMoving = true;
 }
@@ -76,7 +72,6 @@ void right()
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
   // Serial.println("go right!");
-  waiter = true;
   doesForward = false;
   isMoving = true;
 }
@@ -87,9 +82,8 @@ void stoper()
   digitalWrite(ENB, LOW);
   doesForward = false;
   //  Serial.println("STOP!");
-  if (waiter == true)
+  if (isMoving == true)
   {
-    waiter = false;
     delay(150);
   }
   isMoving = false;
@@ -99,6 +93,11 @@ void stoper()
 
 void joystickSterring(int x, int y, int mode)
 {
+  if ((mode == 4 || mode == 3) && colideToggle)
+  {
+    return;
+  }
+
   if (mode == 4)
   {
     digitalWrite(IN1, HIGH);

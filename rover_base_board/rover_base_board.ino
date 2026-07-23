@@ -6,32 +6,53 @@
   Communication is provided via an SPI interface.
 */
 
+// ── Core Arduino libraries ─────────────────────────
 #include <Servo.h>
 #include <SPI.h>
 #include "dht.h"
 #include <avr/power.h>
 
-#include "src/motor/motor_control.h"
-#include "src/servo/servo_control.h"
-#include "src/sensors/sensors.h"
-#include "src/spi/spi_comm.h"
-#include "src/commands/command_handler.h"
+// ── SPI pins ─────────────────────────
+#define SPICLOCK 52   // sck
+#define CHIPSELECT 53 // ss
+// static const int spiClk = 10000000; // Clock for SPI
 
+// ── Servo pin ─────────────────────────
+#define servopin 3
+
+// ── PIR pin ─────────────────────────
+#define PIRpin 40
+
+// ── DHT sensor ─────────────────────────
 #define dht_apin 22
 dht DHT;
 
-#define SPICLOCK 52   // sck
-#define CHIPSELECT 53 // ss
-
-#define servopin 3
-#define PIRpin 40
-
+// ── Servo state ─────────────────────────
+Servo myservo;
 int deg = 0;
 
+// ── Telemetry ─────────────────────────
+int currTemp = 0;
+int currHumi = 0;
+
+// ── Ultrasonic ─────────────────────────
+unsigned long duration; // variable for the duration of sound wave travel
+int distance;           // variable for the distance measurement
+
+// ── Movement state flags ─────────────────────────
+bool colideToggle = false;
+bool doesForward = false;
+bool isMoving = false;
+bool xToggle = false;
+
+// ── Global flags ─────────────────────────
+bool lowEnergyMode = false;
+
+// ── Joystick/command parsing ─────────────────────────
 int xPos, yPos, tPos;
+String xValue, yValue, tValue;
 
-// static const int spiClk = 10000000; // Clock for SPI
-
+// ── Timings/watchdogs ─────────────────────────
 unsigned long prevMillisUSS = 0;
 unsigned long prevMillisSEND = 0;
 unsigned long prevMillisSTOP = 0;
@@ -39,38 +60,21 @@ unsigned long prevMillisPIR = 0;
 unsigned long prevMillisControl = 0;
 
 unsigned long moveDetectionTimeout = 11000;
-
 unsigned long timeToStop = -1;
-
 unsigned int ultrasonicInterval = 100;
 
-int currTemp = 0;
-int currHumi = 0;
-
-unsigned long duration; // variable for the duration of sound wave travel
-int distance;           // variable for the distance measurement
-
-bool colideToggle = false;
-bool doesForward = false;
-bool isMoving = false;
-bool waiter = false;
-bool xToggle = false;
-
-bool lowEnergyMode = false;
-
-String data;
+// ── SPI link ─────────────────────────
 String dataRec;
-
-String xValue, yValue, tValue;
-
-char buffer[32];
-
 uint8_t oldsrg;
 uint8_t c;
+volatile bool commandReady = false;
 
-void (*resetFunc)(void) = 0;
-
-Servo myservo;
+// ── Internal modules (are using extern variables from this file) ─────────────────────────
+#include "src/motor/motor_control.h"
+#include "src/servo/servo_control.h"
+#include "src/sensors/sensors.h"
+#include "src/spi/spi_comm.h"
+#include "src/commands/command_handler.h"
 
 String getReadableTime()
 {
@@ -177,6 +181,14 @@ void setup()
 
 void loop()
 {
+  if (commandReady)
+  {
+    Serial.println(dataRec);
+    handleIncomingRequests(dataRec);
+    dataRec = "";
+    commandReady = false;
+  }
+
   if (timeToStop > 0)
   {
     if (millis() - prevMillisSTOP >= timeToStop)
@@ -214,7 +226,6 @@ void loop()
     }
     if (changedToggle)
     {
-      memset(buffer, 0, sizeof(buffer));
       sendData("_t" + String(currTemp) + "h" + String(currHumi) + "v" + String(getAccurateVoltage()) + "");
     }
 

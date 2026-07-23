@@ -69,7 +69,6 @@ void handleIncomingRequests(String message)
   }
   else if (message == "sendData")
   {
-    memset(buffer, 0, sizeof(buffer));
     sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
   }
   else if (message == "/1")

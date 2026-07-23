@@ -3,33 +3,41 @@
 #include "Arduino.h"
 #include <SPI.h>
 
-extern char buffer[32];
 extern String dataRec;
 extern uint8_t oldsrg;
 extern uint8_t c;
+extern volatile bool commandReady;
+
+volatile uint8_t txBuffer[33];
+volatile uint8_t txLength = 0;
+volatile uint8_t txIndex = 0;
 
 // Forward declaration to avoid a circular include with command_handler.h
 void handleIncomingRequests(String message);
 
-void fill_buffer(String data)
+void fill_buffer(const String &data)
 {
-  for (int i = 0; i <= data.length(); i++)
+  size_t len = min(data.length(), sizeof(txBuffer) - 1);
+
+  for (size_t i = 0; i < len; i++)
   {
-    buffer[i] = (uint8_t)data[i];
+    txBuffer[i] = (uint8_t)data[i];
   }
+
+  txBuffer[len] = 4;
+  txLength = len + 1;
 }
 
-void sendData(String data)
+void sendData(const String &data)
 {
-  // Serial.println(data);
+  noInterrupts();
   fill_buffer(data);
-
-  SPI.transfer(buffer, data.length() + 1);
-  delayMicroseconds(5);
-  SPI.transfer((uint8_t)4);
+  txIndex = 1;
+  SPDR = txBuffer[0];
+  interrupts();
 }
 
-/* ISR that handles reciving data via SPI from Master */
+/* ISR that handles data transfer via SPI */
 
 ISR(SPI_STC_vect)
 {
@@ -39,19 +47,27 @@ ISR(SPI_STC_vect)
 
   c = SPDR;
 
+  if (txIndex < txLength)
+    SPDR = txBuffer[txIndex++];
+  else
+    SPDR = 0;
+
   if (c < 128 && c > 31)
   {
     dataRec += (char)c;
   }
   if (c == 4)
   {
-    if (dataRec.length() > 0)
+    if (!commandReady && dataRec.length() > 0)
     {
-      Serial.println(dataRec);
-      handleIncomingRequests(dataRec);
+      commandReady = true;
     }
-    dataRec = "";
+    else
+    {
+      dataRec = "";
+    }
   }
+
   SREG = oldsrg;
 }
 
