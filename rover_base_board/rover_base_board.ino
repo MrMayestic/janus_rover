@@ -65,8 +65,6 @@ unsigned int ultrasonicInterval = 100;
 
 // ── SPI link ─────────────────────────
 String dataRec;
-uint8_t oldsrg;
-uint8_t c;
 volatile bool commandReady = false;
 
 // ── Internal modules (are using extern variables from this file) ─────────────────────────
@@ -84,14 +82,11 @@ String getReadableTime()
   unsigned long seconds;
   unsigned long minutes;
   unsigned long hours;
-  unsigned long days;
 
   currentMillis = millis();
   seconds = currentMillis / 1000;
   minutes = seconds / 60;
   hours = minutes / 60;
-  days = hours / 24;
-  currentMillis %= 1000;
   seconds %= 60;
   minutes %= 60;
   hours %= 24;
@@ -118,6 +113,7 @@ void setup()
   // power_adc_disable();
   power_usart1_disable();
   power_usart2_disable();
+  power_usart3_disable();
   // power_timer1_disable();
   // power_timer2_disable();
   // // power_timer3_disable();
@@ -125,7 +121,7 @@ void setup()
   // power_timer5_disable();
   power_twi_disable();
 
-  for (int i = 0; i <= 53; i++)
+  for (int i = 0; i <= 69; i++) // 0-53 digital + 54-69 analog (A0-A15) used as digital I/O
   {
     if (i == 12)
       continue;
@@ -134,7 +130,7 @@ void setup()
   }
 
   pinMode(LED_BUILTIN, OUTPUT);
-  // digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
   digitalWrite(LED_BUILTIN, LOW);
   // irrecv.enableIRIn();
@@ -143,6 +139,9 @@ void setup()
   myservo.write(0);
 
   deg = myservo.read();
+
+  SPI.begin(); // must come before the slave pin modes below - SPI.begin() sets up master-oriented
+               // pin defaults (incl. SS as OUTPUT) that would otherwise override them
 
   pinMode(MOSI, INPUT);
   pinMode(MISO, OUTPUT);
@@ -165,7 +164,6 @@ void setup()
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 
-  SPI.begin();
   SPCR &= ~_BV(MSTR);
   SPCR |= _BV(SPE);
 
@@ -231,7 +229,8 @@ void loop()
 
     // sendData("test");
   }
-  if (millis() - prevMillisUSS >= ultrasonicInterval && !lowEnergyMode)
+  unsigned long currentUssInterval = colideToggle ? 500 : ultrasonicInterval;
+  if (millis() - prevMillisUSS >= currentUssInterval && !lowEnergyMode)
   {
     if (getDistance() < 29)
     {
@@ -245,7 +244,6 @@ void loop()
         stoper();
       }
       colideToggle = true;
-      delay(500);
     }
     else
     {

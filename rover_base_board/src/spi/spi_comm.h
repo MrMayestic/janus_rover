@@ -4,8 +4,6 @@
 #include <SPI.h>
 
 extern String dataRec;
-extern uint8_t oldsrg;
-extern uint8_t c;
 extern volatile bool commandReady;
 
 volatile uint8_t txBuffer[33];
@@ -41,30 +39,33 @@ void sendData(const String &data)
 
 ISR(SPI_STC_vect)
 {
-  oldsrg = SREG;
+  uint8_t oldsrg = SREG;
 
   cli();
 
-  c = SPDR;
+  uint8_t c = SPDR;
 
   if (txIndex < txLength)
     SPDR = txBuffer[txIndex++];
   else
     SPDR = 0;
 
-  if (c < 128 && c > 31)
+  if (!commandReady)
   {
-    dataRec += (char)c;
-  }
-  if (c == 4)
-  {
-    if (!commandReady && dataRec.length() > 0)
+    if (c < 128 && c > 31)
     {
-      commandReady = true;
+      dataRec += (char)c;
     }
-    else
+    if (c == 4)
     {
-      dataRec = "";
+      if (dataRec.length() > 0)
+      {
+        commandReady = true;
+      }
+      else
+      {
+        dataRec = "";
+      }
     }
   }
 

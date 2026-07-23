@@ -18,58 +18,190 @@ extern bool lowEnergyMode;
 // Forward declaration - defined in the .ino, needed here since headers aren't auto-prototyped like the .ino
 String getReadableTime();
 
+void handleJoystickCommand(const String &message)
+{
+  xPos = 0;
+  yPos = 0;
+
+  xValue = "";
+  yValue = "";
+  tValue = "";
+
+  xPos = message.indexOf("x");
+  yPos = message.indexOf("y");
+  tPos = message.indexOf("t");
+
+  tValue = message[tPos + 1];
+
+  for (int i = xPos + 1; i < yPos; i++)
+  {
+    xValue = xValue + message[i];
+  }
+
+  if (tPos > 0)
+  {
+    for (int i = yPos + 1; i < tPos; i++)
+    {
+      yValue = yValue + message[i];
+    }
+  }
+  else
+  {
+    for (int i = yPos + 1; i < message.length(); i++)
+    {
+      yValue = yValue + message[i];
+    }
+  }
+
+  if (tValue.toInt() > 0)
+  {
+    joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
+  }
+  else
+  {
+    WEBjoystickSterring(xValue.toInt(), yValue.toInt());
+  }
+}
+
+void handleSendDataCommand()
+{
+  sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
+}
+
+void handleLongPrecisionForward()
+{
+  forward();
+  timeToStop = 800;
+  prevMillisSTOP = millis();
+}
+
+void handleLongPrecisionLeft()
+{
+  left();
+  timeToStop = 800;
+  prevMillisSTOP = millis();
+}
+
+void handleLongPrecisionBack()
+{
+  back();
+  timeToStop = 800;
+  prevMillisSTOP = millis();
+}
+
+void handleLongPrecisionRight()
+{
+  right();
+  timeToStop = 800;
+  prevMillisSTOP = millis();
+}
+
+void handlePrecisionForward()
+{
+  forward();
+  timeToStop = 500;
+  prevMillisSTOP = millis();
+}
+
+void handlePrecisionLeft()
+{
+  left();
+  timeToStop = 500;
+  prevMillisSTOP = millis();
+}
+
+void handlePrecisionBack()
+{
+  back();
+  timeToStop = 500;
+  prevMillisSTOP = millis();
+}
+
+void handlePrecisionRight()
+{
+  right();
+  timeToStop = 500;
+  prevMillisSTOP = millis();
+}
+
+void handleShortPrecisionForward()
+{
+  forward();
+  timeToStop = 150;
+  prevMillisSTOP = millis();
+}
+
+void handleShortPrecisionLeft()
+{
+  left();
+  timeToStop = 150;
+  prevMillisSTOP = millis();
+}
+
+void handleShortPrecisionBack()
+{
+  back();
+  timeToStop = 150;
+  prevMillisSTOP = millis();
+}
+
+void handleShortPrecisionRight()
+{
+  right();
+  timeToStop = 150;
+  prevMillisSTOP = millis();
+}
+
+void handleUltraPrecisionForward()
+{
+  forward();
+  timeToStop = 85;
+  prevMillisSTOP = millis();
+}
+
+void handleUltraPrecisionLeft()
+{
+  left();
+  timeToStop = 85;
+  prevMillisSTOP = millis();
+}
+
+void handleUltraPrecisionBack()
+{
+  back();
+  timeToStop = 85;
+  prevMillisSTOP = millis();
+}
+
+void handleUltraPrecisionRight()
+{
+  right();
+  timeToStop = 85;
+  prevMillisSTOP = millis();
+}
+
+void handleLowEnergyCommand()
+{
+  lowEnergyMode = true;
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+void handleKeepAliveCommand()
+{
+  prevMillisControl = millis();
+}
+
 /*Function that handles messages from Master for example: to steering*/
 
 void handleIncomingRequests(String message)
 {
   if (message.indexOf("x") != -1)
   {
-    xPos = 0;
-    yPos = 0;
-
-    xValue = "";
-    yValue = "";
-    tValue = "";
-
-    xPos = message.indexOf("x");
-    yPos = message.indexOf("y");
-    tPos = message.indexOf("t");
-
-    tValue = message[tPos + 1];
-
-    for (int i = xPos + 1; i < yPos; i++)
-    {
-      xValue = xValue + message[i];
-    }
-
-    if (tPos > 0)
-    {
-
-      for (int i = yPos + 1; i < tPos; i++)
-      {
-        yValue = yValue + message[i];
-      }
-    }
-    else
-    {
-      for (int i = yPos + 1; i < message.length(); i++)
-      {
-        yValue = yValue + message[i];
-      }
-    }
-
-    if (tValue.toInt() > 0)
-    {
-      joystickSterring(xValue.toInt(), yValue.toInt(), tValue.toInt());
-    }
-    else
-    {
-      WEBjoystickSterring(xValue.toInt(), yValue.toInt());
-    }
+    handleJoystickCommand(message);
   }
   else if (message == "sendData")
   {
-    sendData("_t" + String(currTemp) + "h" + String(currHumi) + "ss" + getReadableTime() + "");
+    handleSendDataCommand();
   }
   else if (message == "/1")
   {
@@ -89,132 +221,67 @@ void handleIncomingRequests(String message)
   }
   else if (message == "/lprec1")
   {
-
-    forward();
-
-    timeToStop = 800;
-
-    prevMillisSTOP = millis();
+    handleLongPrecisionForward();
   }
   else if (message == "/lprec2")
   {
-    left();
-
-    timeToStop = 800;
-
-    prevMillisSTOP = millis();
+    handleLongPrecisionLeft();
   }
   else if (message == "/lprec3")
   {
-    back();
-
-    timeToStop = 800;
-
-    prevMillisSTOP = millis();
+    handleLongPrecisionBack();
   }
   else if (message == "/lprec4")
   {
-    right();
-
-    timeToStop = 800;
-
-    prevMillisSTOP = millis();
+    handleLongPrecisionRight();
   }
   else if (message == "/prec1")
   {
-    forward();
-
-    timeToStop = 500;
-
-    prevMillisSTOP = millis();
+    handlePrecisionForward();
   }
   else if (message == "/prec2")
   {
-    left();
-
-    timeToStop = 500;
-
-    prevMillisSTOP = millis();
+    handlePrecisionLeft();
   }
   else if (message == "/prec3")
   {
-    back();
-
-    timeToStop = 500;
-
-    prevMillisSTOP = millis();
+    handlePrecisionBack();
   }
   else if (message == "/prec4")
   {
-    right();
-
-    timeToStop = 500;
-
-    prevMillisSTOP = millis();
+    handlePrecisionRight();
   }
   else if (message == "/sprec1")
   {
-    forward();
-
-    timeToStop = 150;
-
-    prevMillisSTOP = millis();
+    handleShortPrecisionForward();
   }
   else if (message == "/sprec2")
   {
-    left();
-
-    timeToStop = 150;
-
-    prevMillisSTOP = millis();
+    handleShortPrecisionLeft();
   }
   else if (message == "/sprec3")
   {
-    back();
-
-    timeToStop = 150;
-
-    prevMillisSTOP = millis();
+    handleShortPrecisionBack();
   }
   else if (message == "/sprec4")
   {
-    right();
-
-    timeToStop = 150;
-
-    prevMillisSTOP = millis();
+    handleShortPrecisionRight();
   }
   else if (message == "/uprec1")
   {
-    forward();
-
-    timeToStop = 85;
-
-    prevMillisSTOP = millis();
+    handleUltraPrecisionForward();
   }
   else if (message == "/uprec2")
   {
-    left();
-
-    timeToStop = 85;
-
-    prevMillisSTOP = millis();
+    handleUltraPrecisionLeft();
   }
   else if (message == "/uprec3")
   {
-    back();
-
-    timeToStop = 85;
-
-    prevMillisSTOP = millis();
+    handleUltraPrecisionBack();
   }
   else if (message == "/uprec4")
   {
-    right();
-
-    timeToStop = 85;
-
-    prevMillisSTOP = millis();
+    handleUltraPrecisionRight();
   }
   else if (message == "/0")
   {
@@ -230,12 +297,11 @@ void handleIncomingRequests(String message)
   }
   else if (message == "lowEn")
   {
-    lowEnergyMode = true;
-    digitalWrite(LED_BUILTIN, LOW);
+    handleLowEnergyCommand();
   }
   else if (message == "alv")
   {
-    prevMillisControl = millis();
+    handleKeepAliveCommand();
   }
 }
 
